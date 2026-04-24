@@ -154,13 +154,19 @@ def _process_with_agent(chat_id: str, user_text: str) -> None:
 
 
 def _check_tool_called(messages: list) -> bool:
+    """Detect tool use in Strands/Bedrock shapes (toolUse) and legacy Anthropic (type tool_use)."""
     for msg in reversed(messages):
         content = msg.get("content", [])
-        if isinstance(content, list):
-            for block in content:
-                if isinstance(block, dict) and block.get("type") == "tool_use":
-                    if block.get("name") in ("save_entry", "save_expense"):
-                        return True
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "tool_use" and block.get("name") in ("save_entry", "save_expense"):
+                return True
+            tu = block.get("toolUse")
+            if isinstance(tu, dict) and tu.get("name") in ("save_entry", "save_expense"):
+                return True
     return False
 
 

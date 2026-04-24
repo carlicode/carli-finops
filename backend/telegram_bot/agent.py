@@ -4,7 +4,9 @@ Registers expenses and income in BOB or USD.
 """
 import json
 import os
-from typing import Optional
+from decimal import Decimal
+from functools import wraps
+from typing import Any, Optional
 
 import boto3
 from strands import Agent, tool
@@ -16,6 +18,59 @@ OWNER_USER_ID = os.environ.get("OWNER_USER_ID", "carli")
 
 dynamodb = boto3.resource("dynamodb", region_name=REGION)
 expenses_table = dynamodb.Table(EXPENSES_TABLE)
+
+
+def json_safe_deep(obj: Any) -> Any:
+    """Bedrock converse/botocore rejects Decimal. DynamoDB also returns Decimals for numbers."""
+    if isinstance(obj, Decimal):
+        return int(obj) if obj % 1 == 0 else float(obj)
+    if isinstance(obj, dict):
+        return {k: json_safe_deep(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [json_safe_deep(v) for v in obj]
+    if isinstance(obj, tuple):
+        return tuple(json_safe_deep(v) for v in obj)
+    return obj
+
+
+def _patch_bedrock_client(model: BedrockModel) -> None:
+    """Strands may pass tool arguments as Decimal; sanitize every Converse request."""
+    client = model.client
+    if getattr(client, "_carli_json_safe_converse", False):
+        return
+    orig_converse = client.converse
+    orig_stream = client.converse_stream
+
+    @wraps(orig_converse)
+    def converse_safe(**kwargs):
+        return orig_converse(**json_safe_deep(kwargs))
+
+    @wraps(orig_stream)
+    def converse_stream_safe(**kwargs):
+        return orig_stream(**json_safe_deep(kwargs))
+
+    client.converse = converse_safe
+    client.converse_stream = converse_stream_safe
+    client._carli_json_safe_converse = True
+
+
+def _extract_assistant_text(message: dict | None) -> str:
+    """Bedrock content blocks use {'text': '...'}; Strands may use {'type':'text','text':'...'}."""
+    if not message:
+        return ""
+    content = message.get("content", [])
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") == "text":
+            parts.append(str(block.get("text") or ""))
+        elif isinstance(block.get("text"), str):
+            parts.append(block["text"])
+    return "".join(parts)
+
 
 EXPENSE_CATEGORIES = [
     "Comida & Restaurantes",
@@ -116,6 +171,8 @@ def save_entry(
     if payment_method not in PAYMENT_METHODS:
         payment_method = "Tarjeta de Débito"
 
+    amount = float(amount)
+
     now = datetime.now(timezone.utc)
     expense_id = f"{now.strftime('%Y-%m-%dT%H:%M:%S')}#{uuid.uuid4().hex[:8]}"
     month = now.strftime("%Y-%m")
@@ -150,6 +207,7 @@ def get_finops_agent() -> Agent:
         temperature=0.3,
         streaming=False,
     )
+    _patch_bedrock_client(model)
     return Agent(
         model=model,
         system_prompt=SYSTEM_PROMPT,
@@ -161,18 +219,14 @@ def process_message(user_message: str, conversation_history: Optional[list] = No
     agent = get_finops_agent()
 
     if conversation_history:
-        for msg in conversation_history:
+        for msg in json_safe_deep(conversation_history):
             agent.messages.append(msg)
 
     result = agent(user_message)
 
-    response_text = ""
-    if hasattr(result, "message") and result.message:
-        content = result.message.get("content", [])
-        for block in content:
-            if isinstance(block, dict) and block.get("type") == "text":
-                response_text += block.get("text", "")
-    elif hasattr(result, "__str__"):
+    msg = getattr(result, "message", None)
+    response_text = _extract_assistant_text(msg if isinstance(msg, dict) else None)
+    if not response_text.strip() and hasattr(result, "__str__"):
         response_text = str(result)
 
     return response_text.strip(), agent.messages
