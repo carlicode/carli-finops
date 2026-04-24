@@ -130,20 +130,22 @@ def _process_with_agent(chat_id: str, user_text: str) -> None:
 
         _save_session(chat_id, {"history": updated_history})
 
-        if response_text:
-            _send_message(chat_id, response_text)
-
-        # Check if the agent saved an expense (tool was called)
         tool_called = _check_tool_called(updated_history)
+        confirm = (response_text or "").strip()
+        if tool_called and not confirm:
+            confirm = _save_entry_confirmation_from_history(updated_history)
+        if tool_called and not confirm:
+            confirm = "Listo, movimiento guardado."
+
         if tool_called:
-            # Clear session after successful save
             _clear_session(chat_id)
-            # Offer quick actions
             _send_inline_keyboard(
                 chat_id,
-                "¿Qué hacemos ahora?",
+                f"{confirm}\n\n¿Qué hacemos ahora?",
                 [[("Otro movimiento", "nuevo"), ("Resumen del mes", "resumen")]],
             )
+        elif confirm:
+            _send_message(chat_id, confirm)
 
     except Exception as e:
         logger.exception("Agent error: %s", e)
@@ -151,6 +153,25 @@ def _process_with_agent(chat_id: str, user_text: str) -> None:
             chat_id,
             "Ocurrió un error procesando tu mensaje. Por favor intenta de nuevo.",
         )
+
+
+def _save_entry_confirmation_from_history(messages: list) -> str:
+    """save_entry return value is sent back as a user message with toolResult content blocks."""
+    for msg in reversed(messages):
+        if msg.get("role") != "user":
+            continue
+        for block in msg.get("content", []):
+            if not isinstance(block, dict):
+                continue
+            tr = block.get("toolResult")
+            if not isinstance(tr, dict):
+                continue
+            for item in tr.get("content") or []:
+                if isinstance(item, dict):
+                    t = item.get("text")
+                    if isinstance(t, str) and t.strip():
+                        return t.strip()
+    return ""
 
 
 def _check_tool_called(messages: list) -> bool:
@@ -271,7 +292,10 @@ def _send_message(chat_id: str, text: str, parse_mode: str = "") -> None:
     if parse_mode:
         payload["parse_mode"] = parse_mode
     try:
-        requests.post(f"{TELEGRAM_API}/sendMessage", json=payload, timeout=10)
+        r = requests.post(f"{TELEGRAM_API}/sendMessage", json=payload, timeout=10)
+        data = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+        if not data.get("ok"):
+            logger.warning("Telegram sendMessage not ok: %s", data)
     except Exception as e:
         logger.warning("sendMessage failed: %s", e)
 
@@ -279,11 +303,14 @@ def _send_message(chat_id: str, text: str, parse_mode: str = "") -> None:
 def _send_inline_keyboard(chat_id: str, text: str, buttons: list) -> None:
     keyboard = {"inline_keyboard": [[{"text": btn[0], "callback_data": btn[1]} for btn in row] for row in buttons]}
     try:
-        requests.post(
+        r = requests.post(
             f"{TELEGRAM_API}/sendMessage",
             json={"chat_id": chat_id, "text": text, "reply_markup": keyboard},
             timeout=10,
         )
+        data = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+        if not data.get("ok"):
+            logger.warning("Telegram sendMessage (keyboard) not ok: %s", data)
     except Exception as e:
         logger.warning("sendMessage (keyboard) failed: %s", e)
 

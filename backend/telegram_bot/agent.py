@@ -69,7 +69,22 @@ def _extract_assistant_text(message: dict | None) -> str:
             parts.append(str(block.get("text") or ""))
         elif isinstance(block.get("text"), str):
             parts.append(block["text"])
+        # Citations / nested text (same as AgentResult.__str__)
+        elif "citationsContent" in block:
+            cc = block["citationsContent"]
+            if isinstance(cc, dict) and isinstance(cc.get("content"), list):
+                for c in cc["content"]:
+                    if isinstance(c, dict) and isinstance(c.get("text"), str):
+                        parts.append(c["text"])
     return "".join(parts)
+
+
+def _last_assistant_text(messages: list) -> str:
+    """Last assistant turn may differ from result.message when the loop ends on tool-only turns."""
+    for msg in reversed(messages):
+        if msg.get("role") == "assistant":
+            return _extract_assistant_text(msg if isinstance(msg, dict) else None)
+    return ""
 
 
 EXPENSE_CATEGORIES = [
@@ -226,6 +241,8 @@ def process_message(user_message: str, conversation_history: Optional[list] = No
 
     msg = getattr(result, "message", None)
     response_text = _extract_assistant_text(msg if isinstance(msg, dict) else None)
+    if not response_text.strip():
+        response_text = _last_assistant_text(agent.messages)
     if not response_text.strip() and hasattr(result, "__str__"):
         response_text = str(result)
 
