@@ -94,6 +94,107 @@ Bot: ¡Gasto guardado! ✓
 
 Cámbiala después del primer login desde la consola de Cognito.
 
+---
+
+## Manual de uso
+
+### Bot de Telegram
+
+#### Registrar un gasto (lenguaje natural)
+
+Puedes escribirle al bot de forma libre. El agente de IA extrae la información automáticamente:
+
+```
+Tú:  Almuerzo en el Spoon 8500 tarjeta de débito
+Bot: Gasto guardado: Almuerzo en el Spoon — ₡8,500 (Tarjeta de Débito) en Comida & Restaurantes.
+```
+
+```
+Tú:  Uber 3 dólares
+Bot: ¿Cuál fue el método de pago?
+Tú:  Tarjeta de crédito
+Bot: Gasto guardado: Uber — $3.00 (Tarjeta de Crédito) en Transporte.
+```
+
+También puedes dar todos los datos juntos o ir respondiendo lo que el bot pregunte.
+
+#### Comandos disponibles
+
+| Comando | Descripción |
+|---|---|
+| `/start` | Saludo inicial + instrucciones |
+| `/nuevo` | Iniciar registro de un gasto |
+| `/resumen` | Ver totales del mes actual por categoría |
+| `/cancelar` | Cancelar el registro en curso |
+
+#### Categorías de gasto
+
+El bot las asigna automáticamente, pero puedes corregirla si lo pide:
+
+- Comida & Restaurantes
+- Supermercado
+- Transporte
+- Entretenimiento
+- Salud
+- Servicios (luz, agua, etc.)
+- Ropa & Personal
+- Suscripciones
+- Viajes
+- Otros
+
+#### Métodos de pago
+
+- Efectivo
+- Tarjeta de Crédito
+- Tarjeta de Débito
+- Transferencia
+- SINPE Móvil
+
+#### Monedas soportadas
+
+- **CRC** — colones (`₡`, "mil", "colones")
+- **USD** — dólares (`$`, "dólares", "USD")
+
+Si escribes "5 mil" lo interpreta como ₡5,000. Si escribes "$10" lo registra como $10.00 USD.
+
+---
+
+### Dashboard web
+
+#### Acceso
+
+1. Abre la URL del dashboard (la que entrega Amplify tras el deploy).
+2. Ingresa con usuario `carli` y la contraseña que configuraste.
+
+#### Funciones principales
+
+**Barra lateral izquierda**
+- Navega entre **Gastos** (lista) y **Estadísticas** (gráficos).
+- Selecciona el mes que quieres ver (últimos 6 meses disponibles).
+
+**Registrar un gasto manualmente**
+1. Haz clic en **+ Nuevo gasto** (arriba a la derecha).
+2. Completa: descripción, categoría, monto, moneda y método de pago.
+3. Haz clic en **Guardar**.
+
+El gasto aparece en la lista de inmediato.
+
+**Vista Gastos**
+- Lista de gastos del mes ordenados del más reciente al más antiguo.
+- Cada ítem muestra: descripción, categoría, método de pago, fecha y monto.
+- Haz clic en **✕** al final de una fila para eliminar ese gasto.
+
+**Vista Estadísticas**
+- **Tarjetas de resumen**: total de gastos, total en CRC, total en USD, promedio por gasto.
+- **Gráfico de torta**: distribución de gastos por categoría.
+- **Gráfico de barras**: cantidad de gastos por método de pago.
+
+**Tiempo real**
+- El punto verde junto a "Actualizado" indica que la suscripción en vivo está activa.
+- Cuando registras un gasto desde el bot de Telegram, aparece en el dashboard automáticamente sin recargar la página.
+
+---
+
 ## Costo estimado
 
 ~$1–2/mes (uso personal). Con créditos AWS = $0.
