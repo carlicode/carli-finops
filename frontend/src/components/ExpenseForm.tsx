@@ -32,6 +32,7 @@ const EXPENSE_CATS = [
   'Ropa & Personal',
   'Suscripciones',
   'Viajes',
+  'Madre',
   'Otros',
 ];
 
@@ -49,7 +50,10 @@ const PAYMENT_METHODS = [
   'Tarjeta de Crédito',
   'Tarjeta de Débito',
   'Transferencia',
-  'Ahorro / otra cuenta',
+  'BCP',
+  'BNB',
+  'Regions Bank',
+  'Truist Bank',
   'Billetera digital',
 ];
 

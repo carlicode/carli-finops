@@ -38,6 +38,7 @@ CATEGORIES = [
     "Ropa & Personal",
     "Suscripciones",
     "Viajes",
+    "Madre",
     "Otros",
 ]
 PAYMENT_METHODS = [
@@ -45,7 +46,11 @@ PAYMENT_METHODS = [
     "Tarjeta de Crédito",
     "Tarjeta de Débito",
     "Transferencia",
-    "SINPE Móvil",
+    "BCP",
+    "BNB",
+    "Regions Bank",
+    "Truist Bank",
+    "Billetera digital",
 ]
 
 

@@ -27,6 +27,7 @@ EXPENSE_CATEGORIES = [
     "Ropa & Personal",
     "Suscripciones",
     "Viajes",
+    "Madre",
     "Otros",
 ]
 
@@ -44,7 +45,10 @@ PAYMENT_METHODS = [
     "Tarjeta de Crédito",
     "Tarjeta de Débito",
     "Transferencia",
-    "Ahorro / otra cuenta",
+    "BCP",
+    "BNB",
+    "Regions Bank",
+    "Truist Bank",
     "Billetera digital",
 ]
 

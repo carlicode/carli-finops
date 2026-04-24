@@ -7,8 +7,8 @@ export const t = {
   surface: '#3d1f2e',
   border: '#5c2d45',
   text: '#fef1f5',
-  textMuted: '#f9a8d4',
-  textSubtle: '#9d4a6c',
+  textMuted: '#e2d4d9',   // near-white warm, for labels and secondary text
+  textSubtle: '#a07080',  // muted, for dates / hints
   accent: '#ec4899',
   accentHover: '#f472b6',
   accentSoft: 'rgba(236, 72, 153, 0.15)',
