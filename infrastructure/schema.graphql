@@ -6,6 +6,8 @@ type Expense {
   amount: Float!
   currency: String!
   paymentMethod: String!
+  """EXPENSE o INCOME"""
+  flow: String!
   createdAt: String!
   month: String!
 }
@@ -20,8 +22,11 @@ input CreateExpenseInput {
   description: String!
   category: String!
   amount: Float!
+  """BOB o USD. Por defecto BOB."""
   currency: String
   paymentMethod: String!
+  """EXPENSE o INCOME. Por defecto EXPENSE."""
+  flow: String
 }
 
 input DeleteExpenseInput {

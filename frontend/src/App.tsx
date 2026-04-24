@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { getCurrentUser } from 'aws-amplify/auth';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import { t } from './theme';
 
 export default function App() {
   const [user, setUser] = useState<{ username: string } | null>(null);
@@ -35,13 +36,13 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     height: '100vh',
-    background: '#0f172a',
+    background: t.bg,
   } as React.CSSProperties,
   spinner: {
     width: 40,
     height: 40,
-    border: '3px solid #334155',
-    borderTop: '3px solid #6366f1',
+    border: `3px solid ${t.border}`,
+    borderTop: `3px solid ${t.accent}`,
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   } as React.CSSProperties,

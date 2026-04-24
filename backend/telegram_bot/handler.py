@@ -79,13 +79,13 @@ def _handle_update(update: dict) -> None:
     if text.startswith("/start"):
         _send_message(
             chat_id,
-            "Hola Carli! Soy tu asistente de finanzas.\n\n"
-            "Cuéntame en qué gastaste y yo te ayudo a registrarlo.\n"
-            "Ejemplo: *Almuerzo en restaurante 8500 colones tarjeta de débito*\n\n"
+            "Hola Carli! Registro *gastos* e *ingresos* en *Bs. (BOB)* o *US$*.\n\n"
+            "Ej. gasto: *Almuerzo 25 bs tarjeta de débito*\n"
+            "Ej. ingreso: *Me pagaron el sueldo 3500 bolivianos a la cuenta*\n\n"
             "Comandos:\n"
-            "/nuevo — Registrar un gasto\n"
-            "/resumen — Ver resumen del mes\n"
-            "/cancelar — Cancelar el registro actual",
+            "/nuevo — Nuevo registro (gasto o ingreso)\n"
+            "/resumen — Resumen del mes (BOB y USD)\n"
+            "/cancelar — Cancelar",
             parse_mode="Markdown",
         )
         return
@@ -103,7 +103,7 @@ def _handle_update(update: dict) -> None:
         _clear_session(chat_id)
         _send_message(
             chat_id,
-            "Cuéntame en qué gastaste:",
+            "Cuéntame un gasto o un ingreso (monto en Bs. o dólares):",
         )
         return
 
@@ -136,8 +136,8 @@ def _process_with_agent(chat_id: str, user_text: str) -> None:
             # Offer quick actions
             _send_inline_keyboard(
                 chat_id,
-                "¿Qué quieres hacer ahora?",
-                [[("Registrar otro gasto", "nuevo"), ("Ver resumen del mes", "resumen")]],
+                "¿Qué hacemos ahora?",
+                [[("Otro movimiento", "nuevo"), ("Resumen del mes", "resumen")]],
             )
 
     except Exception as e:
@@ -154,7 +154,7 @@ def _check_tool_called(messages: list) -> bool:
         if isinstance(content, list):
             for block in content:
                 if isinstance(block, dict) and block.get("type") == "tool_use":
-                    if block.get("name") == "save_expense":
+                    if block.get("name") in ("save_entry", "save_expense"):
                         return True
     return False
 
@@ -176,31 +176,39 @@ def _send_summary(chat_id: str) -> None:
             IndexName="month-createdAt-index",
             KeyConditionExpression=Key("month").eq(month),
         )
-        items = resp.get("Items", [])
+        items = [i for i in resp.get("Items", []) if i.get("userId") == OWNER_USER_ID]
 
         if not items:
-            _send_message(chat_id, f"No hay gastos registrados en {month_label}.")
+            _send_message(chat_id, f"No hay movimientos en {month_label}.")
             return
 
-        total_crc = sum(float(i.get("amount", 0)) for i in items if i.get("currency") == "CRC")
-        total_usd = sum(float(i.get("amount", 0)) for i in items if i.get("currency") == "USD")
+        def is_bob(c: str) -> bool:
+            return (c or "BOB").upper() in ("BOB", "CRC", "BS")
 
-        by_category: dict = {}
-        for item in items:
-            cat = item.get("category", "Otros")
-            by_category[cat] = by_category.get(cat, 0) + float(item.get("amount", 0))
+        out_bob = sum(
+            float(i.get("amount", 0)) for i in items
+            if i.get("flow", "EXPENSE") == "EXPENSE" and is_bob(i.get("currency", "BOB"))
+        )
+        out_usd = sum(
+            float(i.get("amount", 0)) for i in items
+            if i.get("flow", "EXPENSE") == "EXPENSE" and (i.get("currency", "") or "").upper() == "USD"
+        )
+        in_bob = sum(
+            float(i.get("amount", 0)) for i in items
+            if i.get("flow") == "INCOME" and is_bob(i.get("currency", "BOB"))
+        )
+        in_usd = sum(
+            float(i.get("amount", 0)) for i in items
+            if i.get("flow") == "INCOME" and (i.get("currency", "") or "").upper() == "USD"
+        )
 
-        lines = [f"*Resumen de {month_label}*", f"Total gastos: {len(items)}", ""]
-        if total_crc:
-            lines.append(f"₡{total_crc:,.0f} colones")
-        if total_usd:
-            lines.append(f"${total_usd:.2f} dólares")
-        lines.append("")
-        lines.append("*Por categoría:*")
-        for cat, amt in sorted(by_category.items(), key=lambda x: -x[1]):
-            lines.append(f"  • {cat}: ₡{amt:,.0f}")
+        lines = [f"Resumen {month_label}", f"Registros: {len(items)}", ""]
+        lines.append(f"Gastos Bs.: {out_bob:,.2f}")
+        lines.append(f"Gastos US$: {out_usd:,.2f}")
+        lines.append(f"Ingresos Bs.: {in_bob:,.2f}")
+        lines.append(f"Ingresos US$: {in_usd:,.2f}")
 
-        _send_message(chat_id, "\n".join(lines), parse_mode="Markdown")
+        _send_message(chat_id, "\n".join(lines))
     except Exception as e:
         logger.exception("Summary error: %s", e)
         _send_message(chat_id, "Error al obtener el resumen.")
@@ -215,7 +223,7 @@ def _handle_callback(callback_query: dict) -> None:
 
     if data == "nuevo":
         _clear_session(chat_id)
-        _send_message(chat_id, "Cuéntame en qué gastaste:")
+        _send_message(chat_id, "Cuéntame un gasto o un ingreso:")
     elif data == "resumen":
         _send_summary(chat_id)
 

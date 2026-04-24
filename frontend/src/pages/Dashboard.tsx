@@ -4,6 +4,7 @@ import { generateClient } from 'aws-amplify/api';
 import ExpenseForm from '../components/ExpenseForm';
 import ExpenseList from '../components/ExpenseList';
 import Stats from '../components/Stats';
+import { t } from '../theme';
 
 const client = generateClient();
 
@@ -18,6 +19,7 @@ const LIST_EXPENSES = `
         amount
         currency
         paymentMethod
+        flow
         createdAt
         month
       }
@@ -36,6 +38,7 @@ const ON_CREATE_EXPENSE = `
       amount
       currency
       paymentMethod
+      flow
       createdAt
       month
     }
@@ -49,6 +52,7 @@ interface Expense {
   amount: number;
   currency: string;
   paymentMethod: string;
+  flow?: string;
   createdAt: string;
   month: string;
 }
@@ -65,7 +69,7 @@ function getCurrentMonth(): string {
 function formatMonthLabel(ym: string): string {
   const [year, month] = ym.split('-');
   const d = new Date(parseInt(year), parseInt(month) - 1, 1);
-  return d.toLocaleDateString('es-CR', { month: 'long', year: 'numeric' });
+  return d.toLocaleDateString('es-BO', { month: 'long', year: 'numeric' });
 }
 
 export default function Dashboard({ username, onLogout }: Props) {
@@ -94,7 +98,6 @@ export default function Dashboard({ username, onLogout }: Props) {
     fetchExpenses();
   }, [fetchExpenses, selectedMonth]);
 
-  // Real-time subscription
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const observable = client.graphql({ query: ON_CREATE_EXPENSE }) as any;
@@ -120,7 +123,6 @@ export default function Dashboard({ username, onLogout }: Props) {
     onLogout();
   };
 
-  // Generate last 6 months for selector
   const months: string[] = [];
   for (let i = 0; i < 6; i++) {
     const d = new Date();
@@ -130,25 +132,26 @@ export default function Dashboard({ username, onLogout }: Props) {
 
   return (
     <div style={s.root}>
-      {/* Sidebar */}
       <aside style={s.sidebar}>
         <div style={s.logo}>
-          <span style={s.logoIcon}>₡</span>
+          <span style={s.logoIcon}>Bs</span>
           <span style={s.logoText}>FinOps</span>
         </div>
 
         <nav style={s.nav}>
           <button
+            type="button"
             style={{ ...s.navItem, ...(tab === 'list' ? s.navActive : {}) }}
             onClick={() => setTab('list')}
           >
-            Gastos
+            Movimientos
           </button>
           <button
+            type="button"
             style={{ ...s.navItem, ...(tab === 'stats' ? s.navActive : {}) }}
             onClick={() => setTab('stats')}
           >
-            Estadísticas
+            Resumen
           </button>
         </nav>
 
@@ -156,6 +159,7 @@ export default function Dashboard({ username, onLogout }: Props) {
           <p style={s.monthLabel}>Mes</p>
           {months.map((m) => (
             <button
+              type="button"
               key={m}
               style={{ ...s.monthBtn, ...(selectedMonth === m ? s.monthActive : {}) }}
               onClick={() => setSelectedMonth(m)}
@@ -167,19 +171,18 @@ export default function Dashboard({ username, onLogout }: Props) {
 
         <div style={s.sidebarBottom}>
           <p style={s.userLabel}>{username}</p>
-          <button style={s.logoutBtn} onClick={handleLogout}>
+          <button type="button" style={s.logoutBtn} onClick={handleLogout}>
             Cerrar sesión
           </button>
         </div>
       </aside>
 
-      {/* Main content */}
       <main style={s.main}>
         <div style={s.topBar}>
           <div>
             <h1 style={s.pageTitle}>{formatMonthLabel(selectedMonth)}</h1>
             <p style={s.subtitle}>
-              Actualizado {lastRefresh.toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}
+              Actualizado {lastRefresh.toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' })}
               <span style={s.liveDot} title="Tiempo real" />
             </p>
           </div>
@@ -207,14 +210,14 @@ const s: Record<string, React.CSSProperties> = {
   root: {
     display: 'flex',
     height: '100vh',
-    background: '#0f172a',
-    color: '#f1f5f9',
+    background: t.bg,
+    color: t.text,
     overflow: 'hidden',
   },
   sidebar: {
     width: 220,
-    background: '#1e293b',
-    borderRight: '1px solid #334155',
+    background: t.bgElevated,
+    borderRight: `1px solid ${t.border}`,
     display: 'flex',
     flexDirection: 'column',
     padding: '24px 16px',
@@ -231,19 +234,20 @@ const s: Record<string, React.CSSProperties> = {
   logoIcon: {
     width: 32,
     height: 32,
-    background: '#312e81',
+    background: t.accentSoft,
+    border: `1px solid ${t.accentBorder}`,
     borderRadius: 8,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: 700,
-    color: '#a5b4fc',
+    color: t.accentHover,
   },
   logoText: {
     fontSize: 16,
     fontWeight: 700,
-    color: '#f1f5f9',
+    color: t.text,
   },
   nav: {
     display: 'flex',
@@ -256,15 +260,15 @@ const s: Record<string, React.CSSProperties> = {
     background: 'none',
     border: 'none',
     borderRadius: 8,
-    color: '#64748b',
+    color: t.textSubtle,
     fontSize: 14,
     fontWeight: 500,
     cursor: 'pointer',
     textAlign: 'left',
   },
   navActive: {
-    background: '#0f172a',
-    color: '#a5b4fc',
+    background: t.inputBg,
+    color: t.accentHover,
   },
   monthPicker: {
     flex: 1,
@@ -272,7 +276,7 @@ const s: Record<string, React.CSSProperties> = {
   monthLabel: {
     fontSize: 11,
     fontWeight: 600,
-    color: '#475569',
+    color: t.textSubtle,
     textTransform: 'uppercase',
     letterSpacing: '0.08em',
     marginBottom: 8,
@@ -285,32 +289,32 @@ const s: Record<string, React.CSSProperties> = {
     background: 'none',
     border: 'none',
     borderRadius: 6,
-    color: '#64748b',
+    color: t.textSubtle,
     fontSize: 13,
     cursor: 'pointer',
     textAlign: 'left',
     marginBottom: 2,
   },
   monthActive: {
-    background: '#0f172a',
-    color: '#f1f5f9',
+    background: t.inputBg,
+    color: t.text,
   },
   sidebarBottom: {
     marginTop: 24,
     paddingTop: 16,
-    borderTop: '1px solid #334155',
+    borderTop: `1px solid ${t.border}`,
   },
   userLabel: {
     fontSize: 13,
-    color: '#94a3b8',
+    color: t.textMuted,
     marginBottom: 10,
     paddingLeft: 4,
   },
   logoutBtn: {
     background: 'none',
-    border: '1px solid #334155',
+    border: `1px solid ${t.border}`,
     borderRadius: 6,
-    color: '#64748b',
+    color: t.textSubtle,
     fontSize: 12,
     padding: '6px 12px',
     cursor: 'pointer',
@@ -331,12 +335,12 @@ const s: Record<string, React.CSSProperties> = {
   pageTitle: {
     fontSize: 24,
     fontWeight: 700,
-    color: '#f1f5f9',
+    color: t.text,
     textTransform: 'capitalize',
   },
   subtitle: {
     fontSize: 13,
-    color: '#475569',
+    color: t.textSubtle,
     marginTop: 4,
     display: 'flex',
     alignItems: 'center',
@@ -346,7 +350,7 @@ const s: Record<string, React.CSSProperties> = {
     display: 'inline-block',
     width: 6,
     height: 6,
-    background: '#22c55e',
+    background: t.income,
     borderRadius: '50%',
   },
   center: {
@@ -358,8 +362,8 @@ const s: Record<string, React.CSSProperties> = {
   spinner: {
     width: 32,
     height: 32,
-    border: '3px solid #334155',
-    borderTop: '3px solid #6366f1',
+    border: `3px solid ${t.border}`,
+    borderTop: `3px solid ${t.accent}`,
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },

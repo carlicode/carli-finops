@@ -1,6 +1,8 @@
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { formatMoney } from '../currency';
+import { t } from '../theme';
 
-interface Expense {
+interface Item {
   expenseId: string;
   description: string;
   category: string;
@@ -8,32 +10,56 @@ interface Expense {
   currency: string;
   paymentMethod: string;
   createdAt: string;
+  flow?: string;
 }
 
 interface Props {
-  expenses: Expense[];
+  expenses: Item[];
 }
 
-const COLORS = ['#6366f1', '#f97316', '#22c55e', '#a855f7', '#3b82f6', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#64748b'];
+const PINK_SCALE = ['#ec4899', '#f472b6', '#fb7185', '#f9a8d4', '#fda4af', '#e879f9', '#a78bfa', '#c084fc'];
+
+function isIncome(item: Item): boolean {
+  return (item.flow || 'EXPENSE') === 'INCOME';
+}
+
+function normCur(c: string): string {
+  const u = (c || 'BOB').toUpperCase();
+  if (u === 'USD') return 'USD';
+  return 'BOB';
+}
+
+function sumBy(items: Item[], cur: 'BOB' | 'USD', kind: 'in' | 'out'): number {
+  return items
+    .filter((e) => normCur(e.currency) === cur)
+    .filter((e) => (kind === 'in' ? isIncome(e) : !isIncome(e)))
+    .reduce((s, e) => s + e.amount, 0);
+}
 
 export default function Stats({ expenses }: Props) {
   if (expenses.length === 0) return null;
 
-  const crcExpenses = expenses.filter((e) => e.currency === 'CRC');
-  const usdExpenses = expenses.filter((e) => e.currency === 'USD');
-  const totalCRC = crcExpenses.reduce((s, e) => s + e.amount, 0);
-  const totalUSD = usdExpenses.reduce((s, e) => s + e.amount, 0);
+  const inBob = sumBy(expenses, 'BOB', 'in');
+  const inUsd = sumBy(expenses, 'USD', 'in');
+  const outBob = sumBy(expenses, 'BOB', 'out');
+  const outUsd = sumBy(expenses, 'USD', 'out');
 
-  // Group by category
-  const byCategory: Record<string, number> = {};
-  for (const e of crcExpenses) {
-    byCategory[e.category] = (byCategory[e.category] || 0) + e.amount;
+  type Row = { name: string; value: number; cur: 'BOB' | 'USD' };
+  const byCategory: Row[] = [];
+  const acc: Record<string, number> = {};
+  for (const e of expenses) {
+    if (isIncome(e)) continue;
+    const cur = (normCur(e.currency) as 'BOB' | 'USD') || 'BOB';
+    const key = `${e.category}|${cur}`;
+    acc[key] = (acc[key] || 0) + e.amount;
   }
-  const categoryData = Object.entries(byCategory)
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value);
+  for (const [key, value] of Object.entries(acc)) {
+    const [name, c] = key.split('|');
+    byCategory.push({ name: `${name} (${c})`, value, cur: c as 'BOB' | 'USD' });
+  }
+  byCategory.sort((a, b) => b.value - a.value);
+  const categoryData = byCategory;
 
-  // Group by payment method
   const byPayment: Record<string, number> = {};
   for (const e of expenses) {
     byPayment[e.paymentMethod] = (byPayment[e.paymentMethod] || 0) + 1;
@@ -42,39 +68,37 @@ export default function Stats({ expenses }: Props) {
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count);
 
+  const fmtTooltip = (v: number) => String(v);
+
   return (
     <div style={s.root}>
-      {/* Totals */}
       <div style={s.totals}>
         <div style={s.statCard}>
-          <p style={s.statLabel}>Total gastos</p>
-          <p style={s.statValue}>{expenses.length}</p>
+          <p style={s.statLabel}>Gastos (BOB / Bs.)</p>
+          <p style={s.statValueNeg}>{outBob > 0 ? `−${formatMoney(outBob, 'BOB')}` : '—'}</p>
         </div>
-        {totalCRC > 0 && (
-          <div style={s.statCard}>
-            <p style={s.statLabel}>Total CRC</p>
-            <p style={s.statValue}>₡{totalCRC.toLocaleString('es-CR')}</p>
-          </div>
-        )}
-        {totalUSD > 0 && (
-          <div style={s.statCard}>
-            <p style={s.statLabel}>Total USD</p>
-            <p style={s.statValue}>${totalUSD.toFixed(2)}</p>
-          </div>
-        )}
         <div style={s.statCard}>
-          <p style={s.statLabel}>Promedio por gasto</p>
-          <p style={s.statValue}>
-            {totalCRC > 0 ? `₡${(totalCRC / (crcExpenses.length || 1)).toLocaleString('es-CR', { maximumFractionDigits: 0 })}` : '-'}
-          </p>
+          <p style={s.statLabel}>Gastos (USD)</p>
+          <p style={s.statValueNeg}>{outUsd > 0 ? `−${formatMoney(outUsd, 'USD')}` : '—'}</p>
+        </div>
+        <div style={s.statCard}>
+          <p style={s.statLabel}>Ingresos (BOB / Bs.)</p>
+          <p style={s.statValuePos}>{inBob > 0 ? `+${formatMoney(inBob, 'BOB')}` : '—'}</p>
+        </div>
+        <div style={s.statCard}>
+          <p style={s.statLabel}>Ingresos (USD)</p>
+          <p style={s.statValuePos}>{inUsd > 0 ? `+${formatMoney(inUsd, 'USD')}` : '—'}</p>
+        </div>
+        <div style={s.statCard}>
+          <p style={s.statLabel}>Movimientos</p>
+          <p style={s.statValue}>{expenses.length}</p>
         </div>
       </div>
 
       <div style={s.charts}>
-        {/* Pie chart by category */}
         {categoryData.length > 0 && (
           <div style={s.chartBox}>
-            <p style={s.chartTitle}>Por categoría</p>
+            <p style={s.chartTitle}>Gastos por categoría</p>
             <ResponsiveContainer width="100%" height={200}>
               <PieChart>
                 <Pie
@@ -87,41 +111,44 @@ export default function Stats({ expenses }: Props) {
                   outerRadius={80}
                 >
                   {categoryData.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    <Cell key={i} fill={PINK_SCALE[i % PINK_SCALE.length]} />
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(v: number) => `₡${v.toLocaleString('es-CR')}`}
-                  contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, color: '#f1f5f9', fontSize: 12 }}
+                  formatter={(
+                    v: number,
+                    _n: string,
+                    item: { payload?: Row } | undefined,
+                  ) => [formatMoney(v, item?.payload?.cur || 'BOB'), 'Monto']}
+                  contentStyle={tooltip}
                 />
               </PieChart>
             </ResponsiveContainer>
             <div style={s.legend}>
-              {categoryData.slice(0, 5).map((d, i) => (
+              {categoryData.slice(0, 6).map((d, i) => (
                 <div key={d.name} style={s.legendItem}>
-                  <span style={{ ...s.legendDot, background: COLORS[i % COLORS.length] }} />
+                  <span style={{ ...s.legendDot, background: PINK_SCALE[i % PINK_SCALE.length] }} />
                   <span style={s.legendLabel}>{d.name}</span>
-                  <span style={s.legendValue}>₡{d.value.toLocaleString('es-CR')}</span>
+                  <span style={s.legendValue}>{formatMoney(d.value, d.cur)}</span>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Bar chart by payment method */}
         {paymentData.length > 0 && (
           <div style={s.chartBox}>
-            <p style={s.chartTitle}>Método de pago</p>
+            <p style={s.chartTitle}>Cuenta / método (cantidad de movimientos)</p>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={paymentData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 11 }} />
-                <YAxis tick={{ fill: '#64748b', fontSize: 11 }} />
+                <CartesianGrid strokeDasharray="3 3" stroke={t.border} />
+                <XAxis dataKey="name" tick={{ fill: t.textSubtle, fontSize: 10 }} />
+                <YAxis tick={{ fill: t.textSubtle, fontSize: 11 }} />
                 <Tooltip
-                  contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, color: '#f1f5f9', fontSize: 12 }}
-                  formatter={(v: number) => [`${v} gastos`, 'Cantidad']}
+                  contentStyle={tooltip}
+                  formatter={(v: number) => [fmtTooltip(v), 'Mov.']}
                 />
-                <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="count" fill={t.accent} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -131,6 +158,14 @@ export default function Stats({ expenses }: Props) {
   );
 }
 
+const tooltip: React.CSSProperties = {
+  background: t.bgElevated,
+  border: `1px solid ${t.border}`,
+  borderRadius: 8,
+  color: t.text,
+  fontSize: 12,
+};
+
 const s: Record<string, React.CSSProperties> = {
   root: {
     display: 'flex',
@@ -139,25 +174,35 @@ const s: Record<string, React.CSSProperties> = {
   },
   totals: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
     gap: 12,
   },
   statCard: {
-    background: '#1e293b',
-    border: '1px solid #334155',
+    background: t.bgElevated,
+    border: `1px solid ${t.border}`,
     borderRadius: 12,
     padding: '16px 18px',
   },
   statLabel: {
     fontSize: 12,
-    color: '#64748b',
+    color: t.textSubtle,
     marginBottom: 6,
     fontWeight: 500,
   },
   statValue: {
     fontSize: 22,
     fontWeight: 700,
-    color: '#f1f5f9',
+    color: t.text,
+  },
+  statValueNeg: {
+    fontSize: 20,
+    fontWeight: 700,
+    color: t.expense,
+  },
+  statValuePos: {
+    fontSize: 20,
+    fontWeight: 700,
+    color: t.income,
   },
   charts: {
     display: 'grid',
@@ -165,15 +210,15 @@ const s: Record<string, React.CSSProperties> = {
     gap: 16,
   },
   chartBox: {
-    background: '#1e293b',
-    border: '1px solid #334155',
+    background: t.bgElevated,
+    border: `1px solid ${t.border}`,
     borderRadius: 12,
     padding: '20px 16px',
   },
   chartTitle: {
     fontSize: 13,
     fontWeight: 600,
-    color: '#94a3b8',
+    color: t.textMuted,
     marginBottom: 12,
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
@@ -197,12 +242,12 @@ const s: Record<string, React.CSSProperties> = {
   },
   legendLabel: {
     fontSize: 12,
-    color: '#94a3b8',
+    color: t.textMuted,
     flex: 1,
   },
   legendValue: {
     fontSize: 12,
     fontWeight: 600,
-    color: '#f1f5f9',
+    color: t.text,
   },
 };

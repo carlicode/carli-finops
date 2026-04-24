@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { signIn } from 'aws-amplify/auth';
+import { t } from '../theme';
 
 interface Props {
   onLogin: (username: string) => void;
@@ -32,10 +33,10 @@ export default function Login({ onLogin }: Props) {
     <div style={s.root}>
       <div style={s.card}>
         <div style={s.logo}>
-          <span style={s.logoIcon}>₡</span>
+          <span style={s.logoIcon}>Bs</span>
         </div>
         <h1 style={s.title}>Carli FinOps</h1>
-        <p style={s.subtitle}>Control de gastos personales</p>
+        <p style={s.subtitle}>Gastos e ingresos (BOB / USD)</p>
 
         <form onSubmit={handleSubmit} style={s.form}>
           <div style={s.field}>
@@ -57,7 +58,6 @@ export default function Login({ onLogin }: Props) {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
               required
             />
           </div>
@@ -79,12 +79,12 @@ const s: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: '#0f172a',
+    background: t.bg,
     padding: 24,
   },
   card: {
-    background: '#1e293b',
-    border: '1px solid #334155',
+    background: t.bgElevated,
+    border: `1px solid ${t.border}`,
     borderRadius: 16,
     padding: '40px 36px',
     width: '100%',
@@ -94,7 +94,8 @@ const s: Record<string, React.CSSProperties> = {
   logo: {
     width: 64,
     height: 64,
-    background: '#312e81',
+    background: t.accentSoft,
+    border: `1px solid ${t.accentBorder}`,
     borderRadius: 16,
     display: 'flex',
     alignItems: 'center',
@@ -102,19 +103,19 @@ const s: Record<string, React.CSSProperties> = {
     margin: '0 auto 20px',
   },
   logoIcon: {
-    fontSize: 28,
-    color: '#a5b4fc',
-    fontWeight: 700,
+    fontSize: 18,
+    fontWeight: 800,
+    color: t.accent,
   },
   title: {
     fontSize: 24,
     fontWeight: 700,
-    color: '#f1f5f9',
+    color: t.text,
     marginBottom: 6,
   },
   subtitle: {
     fontSize: 14,
-    color: '#94a3b8',
+    color: t.textMuted,
     marginBottom: 32,
   },
   form: {
@@ -131,25 +132,25 @@ const s: Record<string, React.CSSProperties> = {
   label: {
     fontSize: 13,
     fontWeight: 500,
-    color: '#94a3b8',
+    color: t.textMuted,
   },
   input: {
     padding: '10px 14px',
-    background: '#0f172a',
-    border: '1px solid #334155',
+    background: t.inputBg,
+    border: `1px solid ${t.border}`,
     borderRadius: 8,
-    color: '#f1f5f9',
+    color: t.text,
     fontSize: 15,
     outline: 'none',
   },
   error: {
-    color: '#f87171',
+    color: '#fb7185',
     fontSize: 13,
     textAlign: 'center',
   },
   btn: {
     padding: '12px',
-    background: '#4f46e5',
+    background: t.accent,
     color: '#fff',
     border: 'none',
     borderRadius: 8,

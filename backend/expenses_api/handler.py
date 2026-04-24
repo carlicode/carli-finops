@@ -17,7 +17,7 @@ OWNER_USER_ID = os.environ.get("OWNER_USER_ID", "carli")
 dynamodb = boto3.resource("dynamodb", region_name=REGION)
 table = dynamodb.Table(EXPENSES_TABLE)
 
-CATEGORIES = [
+EXPENSE_CATEGORIES = [
     "Comida & Restaurantes",
     "Supermercado",
     "Transporte",
@@ -30,13 +30,28 @@ CATEGORIES = [
     "Otros",
 ]
 
+INCOME_CATEGORIES = [
+    "Salario / Trabajo",
+    "Redes sociales (TikTok, etc.)",
+    "Freelance",
+    "Inversiones / intereses",
+    "Regalos",
+    "Otros ingresos",
+]
+
 PAYMENT_METHODS = [
     "Efectivo",
     "Tarjeta de Crédito",
     "Tarjeta de Débito",
     "Transferencia",
-    "SINPE Móvil",
+    "Ahorro / otra cuenta",
+    "Billetera digital",
 ]
+
+VALID_CURRENCIES = ("BOB", "USD", "CRC")  # CRC legacy
+DEFAULT_CURRENCY = "BOB"
+FLOWS = ("EXPENSE", "INCOME")
+DEFAULT_FLOW = "EXPENSE"
 
 
 def lambda_handler(event: dict, context) -> dict:
@@ -45,7 +60,6 @@ def lambda_handler(event: dict, context) -> dict:
     arguments = event.get("arguments", {})
     identity = event.get("identity", {})
 
-    # Resolve the caller user id (Cognito user or owner for API key callers)
     user_id = _resolve_user_id(identity)
 
     if field_name == "listExpenses":
@@ -62,9 +76,7 @@ def lambda_handler(event: dict, context) -> dict:
 
 def _resolve_user_id(identity: dict) -> str:
     if not identity:
-        # API key caller (bot Lambda) — always the owner
         return OWNER_USER_ID
-    # Cognito identity
     return identity.get("username") or identity.get("sub") or OWNER_USER_ID
 
 
@@ -75,7 +87,6 @@ def _list_expenses(user_id: str, args: dict) -> dict:
 
     kwargs: dict = {"KeyConditionExpression": Key("userId").eq(user_id)}
     if month:
-        # Filter by month via GSI
         kwargs = {
             "IndexName": "month-createdAt-index",
             "KeyConditionExpression": Key("month").eq(month),
@@ -93,8 +104,7 @@ def _list_expenses(user_id: str, args: dict) -> dict:
         resp = table.query(**kwargs)
 
     items = resp.get("Items", [])
-    total = sum(float(item.get("amount", 0)) for item in items)
-
+    total = sum(float(item.get("amount", 0)) for item in items if item.get("flow", DEFAULT_FLOW) == DEFAULT_FLOW)
     new_next_token = None
     if "LastEvaluatedKey" in resp:
         new_next_token = json.dumps(resp["LastEvaluatedKey"])
@@ -112,16 +122,30 @@ def _create_expense(user_id: str, inp: dict) -> dict:
     now = datetime.now(timezone.utc)
     expense_id = f"{now.strftime('%Y-%m-%dT%H:%M:%S')}#{uuid.uuid4().hex[:8]}"
     month = now.strftime("%Y-%m")
-    currency = inp.get("currency", "CRC")
+    cur = (inp.get("currency") or DEFAULT_CURRENCY).upper()
+    if cur not in VALID_CURRENCIES:
+        cur = DEFAULT_CURRENCY
+    flow = (inp.get("flow") or DEFAULT_FLOW).upper()
+    if flow not in FLOWS:
+        flow = DEFAULT_FLOW
+
+    category = inp["category"]
+    if flow == "INCOME":
+        if category not in INCOME_CATEGORIES:
+            category = "Otros ingresos"
+    else:
+        if category not in EXPENSE_CATEGORIES:
+            category = "Otros"
 
     item = {
         "userId": user_id,
         "expenseId": expense_id,
         "description": inp["description"],
-        "category": inp["category"],
+        "category": category,
         "amount": str(inp["amount"]),
-        "currency": currency,
+        "currency": cur,
         "paymentMethod": inp["paymentMethod"],
+        "flow": flow,
         "createdAt": now.isoformat(),
         "month": month,
     }
@@ -140,14 +164,18 @@ def _format_items(items: list) -> list:
 
 
 def _format_item(item: dict) -> dict:
+    cur = item.get("currency", DEFAULT_CURRENCY)
+    if cur not in VALID_CURRENCIES:
+        cur = DEFAULT_CURRENCY
     return {
         "userId": item.get("userId", ""),
         "expenseId": item.get("expenseId", ""),
         "description": item.get("description", ""),
         "category": item.get("category", ""),
         "amount": float(item.get("amount", 0)),
-        "currency": item.get("currency", "CRC"),
+        "currency": cur,
         "paymentMethod": item.get("paymentMethod", ""),
+        "flow": item.get("flow", DEFAULT_FLOW),
         "createdAt": item.get("createdAt", ""),
         "month": item.get("month", ""),
     }

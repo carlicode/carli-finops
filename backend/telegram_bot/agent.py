@@ -1,7 +1,6 @@
 """
 Strands Agent for the FinOps Telegram bot.
-The agent parses free-text expense descriptions and guides the user through
-collecting: description, category, amount, and payment method.
+Registers expenses and income in BOB or USD.
 """
 import json
 import os
@@ -18,7 +17,7 @@ OWNER_USER_ID = os.environ.get("OWNER_USER_ID", "carli")
 dynamodb = boto3.resource("dynamodb", region_name=REGION)
 expenses_table = dynamodb.Table(EXPENSES_TABLE)
 
-CATEGORIES = [
+EXPENSE_CATEGORIES = [
     "Comida & Restaurantes",
     "Supermercado",
     "Transporte",
@@ -31,35 +30,46 @@ CATEGORIES = [
     "Otros",
 ]
 
+INCOME_CATEGORIES = [
+    "Salario / Trabajo",
+    "Redes sociales (TikTok, etc.)",
+    "Freelance",
+    "Inversiones / intereses",
+    "Regalos",
+    "Otros ingresos",
+]
+
 PAYMENT_METHODS = [
     "Efectivo",
     "Tarjeta de Crédito",
     "Tarjeta de Débito",
     "Transferencia",
-    "SINPE Móvil",
+    "Ahorro / otra cuenta",
+    "Billetera digital",
 ]
 
-SYSTEM_PROMPT = f"""Eres el asistente financiero personal de Carli. Tu rol es registrar gastos de forma rápida y amigable.
+SYSTEM_PROMPT = f"""Eres el asistente financiero personal de Carli (Bolivia). Registras GASTOS e INGRESOS en bolivianos (BOB / Bs.) o dólares (USD).
 
-Cuando Carli te diga en qué gastó dinero, debes:
-1. Confirmar la descripción del gasto.
-2. Sugerir la categoría más apropiada de esta lista: {json.dumps(CATEGORIES, ensure_ascii=False)}.
-3. Preguntar el monto exacto si no fue mencionado.
-4. Preguntar el método de pago si no fue mencionado, opciones: {json.dumps(PAYMENT_METHODS, ensure_ascii=False)}.
-5. Una vez que tengas TODOS los datos (descripción, categoría, monto, método de pago), llamar a la herramienta save_expense.
+**Gastos:** cuando diga en qué gastó, pide o infiere: descripción, categoría de gasto, monto, moneda (BOB por defecto), método de pago.
+**Ingresos:** cuando diga que le pagaron, cobró, recibió salario, ganó en TikTok, etc., usa flow=INCOME y categoría de ingreso.
 
-Reglas importantes:
-- Responde siempre en español, de forma corta y directa.
-- Si el usuario menciona el monto en el primer mensaje, no lo preguntes de nuevo.
-- Detecta montos en colones (₡ o CRC) o dólares ($ o USD).
-- Si el monto tiene "mil" asúmelo como CRC (ej: "5 mil" = 5000 CRC).
-- El método de pago por defecto si no se menciona es "Tarjeta de Débito".
-- No uses emojis excesivos, sé conciso.
-- Cuando guardes el gasto, confirma con un mensaje breve de éxito."""
+Categorías de GASTO: {json.dumps(EXPENSE_CATEGORIES, ensure_ascii=False)}
+Categorías de INGRESO: {json.dumps(INCOME_CATEGORIES, ensure_ascii=False)}
+Métodos / cuentas: {json.dumps(PAYMENT_METHODS, ensure_ascii=False)}
+
+Cuando tengas todos los datos, llama a save_entry UNA vez con flow "EXPENSE" o "INCOME".
+
+Reglas:
+- Responde en español, breve.
+- Moneda por defecto: BOB (Bs.). Si dice "dólares", "USD" o "$", usa USD.
+- Montos en bolivianos sin decir moneda = BOB.
+- Para ingresos, payment_method = dónde entró el dinero (ej. Tarjeta de Débito = cuenta bancaria).
+- Confirma con un mensaje corto al guardar."""
 
 
 @tool
-def save_expense(
+def save_entry(
+    flow: str,
     description: str,
     category: str,
     amount: float,
@@ -67,27 +77,40 @@ def save_expense(
     payment_method: str,
 ) -> str:
     """
-    Guarda un gasto en la base de datos DynamoDB.
+    Guarda un gasto o un ingreso en DynamoDB.
 
     Args:
-        description: Descripción del gasto (ej: "Almuerzo en El Spoon")
-        category: Categoría del gasto. Debe ser exactamente una de las categorías válidas.
-        amount: Monto del gasto como número positivo.
-        currency: Moneda, "CRC" para colones o "USD" para dólares.
-        payment_method: Método de pago. Debe ser exactamente uno de los métodos válidos.
+        flow: "EXPENSE" para gastos o "INCOME" para ingresos.
+        description: Qué se compró o de qué es el ingreso.
+        category: Una categoría de la lista correcta según el flow.
+        amount: Monto positivo.
+        currency: "BOB" o "USD".
+        payment_method: Método de pago o cuenta; debe ser de la lista válida.
 
     Returns:
-        Mensaje de confirmación del guardado.
+        Mensaje de confirmación.
     """
     import uuid
     from datetime import datetime, timezone
 
-    if category not in CATEGORIES:
-        category = "Otros"
+    f = (flow or "EXPENSE").upper()
+    if f not in ("EXPENSE", "INCOME"):
+        f = "EXPENSE"
+    c = (currency or "BOB").upper()
+    if c not in ("BOB", "USD", "CRC"):
+        c = "BOB"
+    if c == "CRC":
+        c = "BOB"
+
+    if f == "INCOME":
+        if category not in INCOME_CATEGORIES:
+            category = "Otros ingresos"
+    else:
+        if category not in EXPENSE_CATEGORIES:
+            category = "Otros"
+
     if payment_method not in PAYMENT_METHODS:
         payment_method = "Tarjeta de Débito"
-    if currency not in ("CRC", "USD"):
-        currency = "CRC"
 
     now = datetime.now(timezone.utc)
     expense_id = f"{now.strftime('%Y-%m-%dT%H:%M:%S')}#{uuid.uuid4().hex[:8]}"
@@ -99,16 +122,21 @@ def save_expense(
         "description": description,
         "category": category,
         "amount": str(amount),
-        "currency": currency,
+        "currency": c,
         "paymentMethod": payment_method,
+        "flow": f,
         "createdAt": now.isoformat(),
         "month": month,
     }
     expenses_table.put_item(Item=item)
 
-    currency_symbol = "₡" if currency == "CRC" else "$"
-    formatted = f"{currency_symbol}{amount:,.0f}" if currency == "CRC" else f"{currency_symbol}{amount:.2f}"
-    return f"Gasto guardado: {description} — {formatted} ({payment_method}) en {category}."
+    if c == "USD":
+        formatted = f"US$ {amount:,.2f}"
+    else:
+        formatted = f"Bs. {amount:,.2f}"
+
+    kind = "Gasto" if f == "EXPENSE" else "Ingreso"
+    return f"{kind} guardado: {description} — {formatted} ({payment_method}) · {category}."
 
 
 def get_finops_agent() -> Agent:
@@ -121,15 +149,11 @@ def get_finops_agent() -> Agent:
     return Agent(
         model=model,
         system_prompt=SYSTEM_PROMPT,
-        tools=[save_expense],
+        tools=[save_entry],
     )
 
 
 def process_message(user_message: str, conversation_history: Optional[list] = None) -> tuple[str, list]:
-    """
-    Process a user message using the Strands agent.
-    Returns (agent_response_text, updated_conversation_history).
-    """
     agent = get_finops_agent()
 
     if conversation_history:

@@ -1,6 +1,6 @@
 # Carli FinOps
 
-Control de gastos personal con bot de Telegram + dashboard web en tiempo real.
+Control de gastos e **ingresos** (BOB y USD) con bot de Telegram + dashboard web en tiempo real. Moneda por defecto: **bolivianos (BOB / Bs.)**. Interfaz en **tema rosado**.
 
 ## Stack
 
@@ -15,6 +15,8 @@ Control de gastos personal con bot de Telegram + dashboard web en tiempo real.
 | Frontend | React + TypeScript + Vite |
 | Hosting | AWS Amplify |
 | Infraestructura | AWS CDK (Python) |
+
+Tras cambiar el esquema GraphQL (p. ej. campo `flow`), vuelve a desplegar: `export TELEGRAM_BOT_TOKEN=…` y `cd infrastructure && cdk deploy`.
 
 ## Estructura del proyecto
 
