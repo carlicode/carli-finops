@@ -167,7 +167,7 @@ class FinopsStack(cdk.Stack):
                 type_name="Query",
                 field_name=field,
             )
-        for field in ["createExpense", "deleteExpense"]:
+        for field in ["createExpense", "deleteExpense", "updateExpense"]:
             lambda_ds.create_resolver(
                 f"Mutation{field}Resolver",
                 type_name="Mutation",

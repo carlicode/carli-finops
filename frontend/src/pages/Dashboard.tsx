@@ -196,7 +196,11 @@ export default function Dashboard({ username, onLogout }: Props) {
         ) : (
           <>
             {tab === 'list' && (
-              <ExpenseList expenses={expenses} onDeleted={() => fetchExpenses()} />
+              <ExpenseList
+                expenses={expenses}
+                onDeleted={() => fetchExpenses()}
+                onEdited={() => fetchExpenses()}
+              />
             )}
             {tab === 'stats' && <Stats expenses={expenses} />}
           </>

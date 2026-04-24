@@ -74,6 +74,8 @@ def lambda_handler(event: dict, context) -> dict:
         return _create_expense(user_id, arguments.get("input", {}))
     elif field_name == "deleteExpense":
         return _delete_expense(user_id, arguments.get("input", {}))
+    elif field_name == "updateExpense":
+        return _update_expense(user_id, arguments.get("input", {}))
     else:
         raise ValueError(f"Unknown field: {field_name}")
 
@@ -155,6 +157,53 @@ def _create_expense(user_id: str, inp: dict) -> dict:
     }
     table.put_item(Item=item)
     return _format_item(item)
+
+
+def _update_expense(user_id: str, inp: dict) -> dict:
+    expense_id = inp["expenseId"]
+
+    # Fetch current item first to merge fields
+    resp = table.get_item(Key={"userId": user_id, "expenseId": expense_id})
+    current = resp.get("Item")
+    if not current:
+        raise ValueError(f"Expense {expense_id} not found for user {user_id}")
+
+    # Build update expression for only provided fields
+    updates: dict = {}
+    if "description" in inp and inp["description"] is not None:
+        updates["description"] = inp["description"]
+    if "category" in inp and inp["category"] is not None:
+        cat = inp["category"]
+        flow = inp.get("flow") or current.get("flow", DEFAULT_FLOW)
+        valid = INCOME_CATEGORIES if flow == "INCOME" else EXPENSE_CATEGORIES
+        updates["category"] = cat if cat in valid else current.get("category")
+    if "amount" in inp and inp["amount"] is not None:
+        updates["amount"] = str(inp["amount"])
+    if "currency" in inp and inp["currency"] is not None:
+        cur = inp["currency"].upper()
+        updates["currency"] = cur if cur in VALID_CURRENCIES else current.get("currency", DEFAULT_CURRENCY)
+    if "paymentMethod" in inp and inp["paymentMethod"] is not None:
+        updates["paymentMethod"] = inp["paymentMethod"]
+    if "flow" in inp and inp["flow"] is not None:
+        f = inp["flow"].upper()
+        updates["flow"] = f if f in FLOWS else current.get("flow", DEFAULT_FLOW)
+
+    if not updates:
+        return _format_item(current)
+
+    expr_parts = [f"#{k} = :{k}" for k in updates]
+    expr_names = {f"#{k}": k for k in updates}
+    expr_values = {f":{k}": v for k, v in updates.items()}
+
+    table.update_item(
+        Key={"userId": user_id, "expenseId": expense_id},
+        UpdateExpression="SET " + ", ".join(expr_parts),
+        ExpressionAttributeNames=expr_names,
+        ExpressionAttributeValues=expr_values,
+    )
+
+    updated = {**current, **updates}
+    return _format_item(updated)
 
 
 def _delete_expense(user_id: str, inp: dict) -> bool:

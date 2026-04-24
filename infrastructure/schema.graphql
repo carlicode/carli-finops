@@ -33,6 +33,16 @@ input DeleteExpenseInput {
   expenseId: String!
 }
 
+input UpdateExpenseInput {
+  expenseId: String!
+  description: String
+  category: String
+  amount: Float
+  currency: String
+  paymentMethod: String
+  flow: String
+}
+
 type Query {
   listExpenses(month: String, limit: Int, nextToken: String): ExpenseConnection
     @aws_cognito_user_pools
@@ -49,6 +59,9 @@ type Mutation {
   deleteExpense(input: DeleteExpenseInput!): Boolean
     @aws_cognito_user_pools
     @aws_api_key
+  updateExpense(input: UpdateExpenseInput!): Expense
+    @aws_cognito_user_pools
+    @aws_api_key
 }
 
 type Subscription {
@@ -58,6 +71,10 @@ type Subscription {
     @aws_api_key
   onDeleteExpense: Boolean
     @aws_subscribe(mutations: ["deleteExpense"])
+    @aws_cognito_user_pools
+    @aws_api_key
+  onUpdateExpense: Expense
+    @aws_subscribe(mutations: ["updateExpense"])
     @aws_cognito_user_pools
     @aws_api_key
 }
