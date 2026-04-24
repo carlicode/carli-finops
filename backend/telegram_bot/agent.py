@@ -145,7 +145,7 @@ def save_entry(
 
 def get_finops_agent() -> Agent:
     model = BedrockModel(
-        model_id="anthropic.claude-haiku-4-5-20251001-v1:0",
+        model_id="us.anthropic.claude-haiku-4-5-20251001-v1:0",
         region_name=REGION,
         temperature=0.3,
         streaming=False,
