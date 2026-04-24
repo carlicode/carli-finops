@@ -45,7 +45,14 @@ echo "▶ Pre-build — Packaging Telegram bot Lambda..."
 BUILD_DIR="$PROJECT_DIR/backend/telegram_bot_build"
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
-pip install -r "$PROJECT_DIR/backend/telegram_bot/requirements.txt" -t "$BUILD_DIR" -q
+pip install \
+    --platform manylinux2014_x86_64 \
+    --python-version 3.12 \
+    --implementation cp \
+    --only-binary=:all: \
+    -r "$PROJECT_DIR/backend/telegram_bot/requirements.txt" \
+    -t "$BUILD_DIR" \
+    -q
 cp "$PROJECT_DIR/backend/telegram_bot/"*.py "$BUILD_DIR/"
 echo "  Bot Lambda packaged at backend/telegram_bot_build/"
 
