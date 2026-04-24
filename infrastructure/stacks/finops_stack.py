@@ -93,11 +93,24 @@ class FinopsStack(cdk.Stack):
                 iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole"),
             ],
         )
+        # Bedrock Converse (Strands) + inference profiles; Anthropic via profile also needs Marketplace read/subscribe on the role
         lambda_role.add_to_policy(
             iam.PolicyStatement(
                 actions=[
                     "bedrock:InvokeModel",
                     "bedrock:InvokeModelWithResponseStream",
+                    "bedrock:Converse",
+                ],
+                resources=["*"],
+            )
+        )
+        lambda_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "aws-marketplace:ViewSubscriptions",
+                    "aws-marketplace:GetEntitlements",
+                    "aws-marketplace:DescribeAgreement",
+                    "aws-marketplace:Subscribe",
                 ],
                 resources=["*"],
             )
