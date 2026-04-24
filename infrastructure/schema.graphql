@@ -1,0 +1,58 @@
+type Expense {
+  userId: String!
+  expenseId: String!
+  description: String!
+  category: String!
+  amount: Float!
+  currency: String!
+  paymentMethod: String!
+  createdAt: String!
+  month: String!
+}
+
+type ExpenseConnection {
+  items: [Expense]
+  nextToken: String
+  total: Float
+}
+
+input CreateExpenseInput {
+  description: String!
+  category: String!
+  amount: Float!
+  currency: String
+  paymentMethod: String!
+}
+
+input DeleteExpenseInput {
+  expenseId: String!
+}
+
+type Query {
+  listExpenses(month: String, limit: Int, nextToken: String): ExpenseConnection
+    @aws_cognito_user_pools
+    @aws_api_key
+  getMonthSummary(month: String): ExpenseConnection
+    @aws_cognito_user_pools
+    @aws_api_key
+}
+
+type Mutation {
+  createExpense(input: CreateExpenseInput!): Expense
+    @aws_cognito_user_pools
+    @aws_api_key
+  deleteExpense(input: DeleteExpenseInput!): Boolean
+    @aws_cognito_user_pools
+    @aws_api_key
+}
+
+type Subscription {
+  onCreateExpense: Expense
+    @aws_subscribe(mutations: ["createExpense"])
+    @aws_cognito_user_pools
+    @aws_api_key
+  onDeleteExpense: Boolean
+    @aws_subscribe(mutations: ["deleteExpense"])
+    @aws_cognito_user_pools
+    @aws_api_key
+}
