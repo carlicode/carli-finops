@@ -1,208 +1,162 @@
 # Carli FinOps
 
-Control de gastos e **ingresos** (BOB y USD) con bot de Telegram + dashboard web en tiempo real. Moneda por defecto: **bolivianos (BOB / Bs.)**. Interfaz en **tema rosado**.
+Control de **gastos e ingresos** en **bolivianos (BOB / Bs.)** y **dólares (USD)**. Incluye bot de Telegram (IA), dashboard web en tiempo real (tema rosado) y autenticación con Cognito.
 
 ## Stack
 
 | Capa | Tecnología |
-|---|---|
-| AI / Bot | AWS Strands Agents + Amazon Bedrock (Claude 3.5 Haiku) |
-| Bot | Telegram Bot API (webhook → AWS Lambda) |
-| Backend | AWS Lambda (Python 3.12) |
+|------|------------|
+| AI / Bot | AWS Strands Agents + Amazon Bedrock (**Claude Haiku 4.5**, perfil `us.anthropic...`) |
+| Bot | Telegram Bot API (webhook → API Gateway → Lambda) |
+| Backend | AWS Lambda (Python 3.12): webhook + resolver GraphQL |
 | Base de datos | Amazon DynamoDB |
-| API | AWS AppSync (GraphQL + suscripciones en tiempo real) |
+| API | AWS AppSync (GraphQL + suscripciones) |
 | Auth | Amazon Cognito |
 | Frontend | React + TypeScript + Vite |
 | Hosting | AWS Amplify |
-| Infraestructura | AWS CDK (Python) |
+| Infra | AWS CDK (Python) |
 
-Tras cambiar el esquema GraphQL (p. ej. campo `flow`), vuelve a desplegar: `export TELEGRAM_BOT_TOKEN=…` y `cd infrastructure && cdk deploy`.
+Tras cambiar `schema.graphql` o el stack CDK: vuelve a desplegar infraestructura (`cdk deploy` o `./scripts/deploy.sh`).
 
 ## Estructura del proyecto
 
 ```
 Carli Finops/
-├── infrastructure/       # CDK stack (DynamoDB, Cognito, AppSync, Lambda)
+├── infrastructure/       # CDK (DynamoDB, Cognito, AppSync, Lambda, API Gateway)
 ├── backend/
-│   ├── telegram_bot/     # Webhook handler + Strands Agent
-│   └── expenses_api/     # GraphQL resolver Lambda
-├── frontend/             # React dashboard
-└── scripts/              # Deployment scripts
+│   ├── telegram_bot/     # Webhook + Strands + Bedrock
+│   ├── telegram_bot_build/  # Generado al deploy (no commitear)
+│   └── expenses_api/     # Resolvers GraphQL
+├── frontend/             # Dashboard React
+└── scripts/              # deploy.sh
 ```
 
-## Despliegue paso a paso
+## Despliegue
 
-### Prerequisitos
+### Variables de entorno
 
-- AWS CLI configurado (`aws configure`)
-- Node.js 18+ y Python 3.10+
-- CDK CLI: `npm install -g aws-cdk`
+| Variable | Obligatoria | Uso |
+|----------|-------------|-----|
+| `TELEGRAM_BOT_TOKEN` | Sí (deploy completo) | Token de @BotFather; el CDK lo inyecta en la Lambda del bot |
+| `COGNITO_PASSWORD` | Recomendada | Contraseña del usuario `carli`. Si omites en `./scripts/deploy.sh`, se genera una aleatoria y se mostrará al final (anótala). |
+| `CDK_DEPLOY_REGION` | No | Por defecto `us-east-1` |
 
-### 1. Habilitar Bedrock
+### Prerrequisitos
 
-Habilita el modelo Claude 3.5 Haiku en Amazon Bedrock:
+- AWS CLI configurado
+- Node.js 18+, Python 3.10+
+- `npm install -g aws-cdk`
+- En **Amazon Bedrock** (us-east-1): acceso al modelo **Claude Haiku 4.5** (o el acuerdo Anthropic activo en consola)
+
+### Infraestructura + bot + webhook
 
 ```bash
-open https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/modelaccess
-```
-
-Activa "Anthropic Claude 3.5 Haiku".
-
-### 2. Deploy de infraestructura + bot
-
-```bash
+export TELEGRAM_BOT_TOKEN="tu_token_de_BotFather"
+export COGNITO_PASSWORD="tu_contraseña_segura"   # recomendado
 chmod +x scripts/deploy.sh
 ./scripts/deploy.sh
 ```
 
-Esto despliega:
-- DynamoDB tables
-- Cognito User Pool + usuario `carli`
-- AppSync GraphQL API
-- Lambda: bot de Telegram + resolver GraphQL
-- API Gateway para el webhook
-- Registra automáticamente el webhook en Telegram
+El script:
 
-### 3. Deploy del frontend en Amplify
+- Empaqueta la Lambda del bot con dependencias **Linux x86_64** (`manylinux2014_x86_64`) para evitar errores de `pydantic_core` en Lambda
+- Ejecuta `cdk deploy`
+- Escribe `frontend/.env` con Cognito y AppSync
+- Crea/actualiza usuario `carli` en Cognito
+- Registra el **webhook** de Telegram
 
-1. Ve a [AWS Amplify Console](https://us-east-1.console.aws.amazon.com/amplify/home)
-2. "New app" → "Host web app"
-3. Conecta este repositorio de Git
-4. En "Build settings" usa el archivo `frontend/amplify.yml`
-5. En "Environment variables" agrega las variables del archivo `frontend/.env` que generó el script:
-   - `VITE_USER_POOL_ID`
-   - `VITE_USER_POOL_CLIENT_ID`
-   - `VITE_APPSYNC_ENDPOINT`
+### Frontend en Amplify
 
-### 4. Usar el bot
+1. [Amplify Console](https://us-east-1.console.aws.amazon.com/amplify/home) → la app existente o nueva
+2. Build: `frontend/amplify.yml`
+3. Variables de entorno: mismas que `frontend/.env` (`VITE_USER_POOL_ID`, `VITE_USER_POOL_CLIENT_ID`, `VITE_APPSYNC_ENDPOINT`)
 
-Abre [@Carli_Finops_bot](https://t.me/Carli_Finops_bot) en Telegram y escribe `/start`.
+Build local:
 
-Ejemplo de uso:
-```
-Tú: Almuerzo en restaurante 8500 colones tarjeta
-Bot: ¿Es esto correcto?
-     Descripción: Almuerzo en restaurante
-     Categoría: Comida & Restaurantes
-     Monto: ₡8,500
-     Pago: Tarjeta de Débito
-Bot: ¡Gasto guardado! ✓
+```bash
+cd frontend && npm install && npm run build
 ```
 
-## Credenciales del dashboard
+Para subir un artefacto estático (zip con el **contenido** de `dist/` en la raíz del zip), puedes usar la API de Amplify Hosting como en flujos manuales de despliegue.
 
-- **Usuario**: `carli`
-- **Contraseña**: la que definiste en `COGNITO_PASSWORD` al hacer el deploy
+## Manual de uso — Bot de Telegram
 
-Cámbiala después del primer login desde la consola de Cognito.
+Abre [@Carli_Finops_bot](https://t.me/Carli_Finops_bot) y envía `/start`.
 
----
-
-## Manual de uso
-
-### Bot de Telegram
-
-#### Registrar un gasto (lenguaje natural)
-
-Puedes escribirle al bot de forma libre. El agente de IA extrae la información automáticamente:
-
-```
-Tú:  Almuerzo en el Spoon 8500 tarjeta de débito
-Bot: Gasto guardado: Almuerzo en el Spoon — ₡8,500 (Tarjeta de Débito) en Comida & Restaurantes.
-```
-
-```
-Tú:  Uber 3 dólares
-Bot: ¿Cuál fue el método de pago?
-Tú:  Tarjeta de crédito
-Bot: Gasto guardado: Uber — $3.00 (Tarjeta de Crédito) en Transporte.
-```
-
-También puedes dar todos los datos juntos o ir respondiendo lo que el bot pregunte.
-
-#### Comandos disponibles
+### Comandos
 
 | Comando | Descripción |
-|---|---|
-| `/start` | Saludo inicial + instrucciones |
-| `/nuevo` | Iniciar registro de un gasto |
-| `/resumen` | Ver totales del mes actual por categoría |
-| `/cancelar` | Cancelar el registro en curso |
+|---------|-------------|
+| `/start` | Bienvenida e instrucciones |
+| `/nuevo` | Nuevo movimiento (limpia contexto del agente) |
+| `/resumen` | Totales del mes (gastos e ingresos en BOB y USD) |
+| `/cancelar` | Cancela el registro en curso |
 
-#### Categorías de gasto
+### Lenguaje natural
 
-El bot las asigna automáticamente, pero puedes corregirla si lo pide:
+Escribe gastos o ingresos en una sola frase cuando puedas (descripción, monto, moneda si aplica, método o cuenta).
 
-- Comida & Restaurantes
-- Supermercado
-- Transporte
-- Entretenimiento
-- Salud
-- Servicios (luz, agua, etc.)
-- Ropa & Personal
-- Suscripciones
-- Viajes
-- Otros
+**Gasto**
 
-#### Métodos de pago
+```
+Almorcé en el mercado, 50 Bs, efectivo
+```
 
-- Efectivo
-- Tarjeta de Crédito
-- Tarjeta de Débito
-- Transferencia
-- SINPE Móvil
+**Ingreso**
 
-#### Monedas soportadas
+```
+Me pagaron el sueldo 3500 bolivianos, BNB
+```
 
-- **CRC** — colones (`₡`, "mil", "colones")
-- **USD** — dólares (`$`, "dólares", "USD")
+Tras guardar, el bot envía **un mensaje** con la confirmación y botones «Otro movimiento» / «Resumen del mes».
 
-Si escribes "5 mil" lo interpreta como ₡5,000. Si escribes "$10" lo registra como $10.00 USD.
+### Categorías de gasto
 
----
+Incluye entre otras: Comida & Restaurantes, Supermercado, Transporte, Entretenimiento, Salud, Servicios, Ropa & Personal, Suscripciones, Viajes, **Madre**, Otros.
 
-### Dashboard web
+### Categorías / fuentes de ingreso
 
-#### Acceso
+Salario / Trabajo, Redes sociales (TikTok, etc.), Freelance, Inversiones / intereses, Regalos, Otros ingresos.
 
-1. Abre la URL del dashboard (la que entrega Amplify tras el deploy).
-2. Ingresa con usuario `carli` y la contraseña que configuraste.
+### Métodos y cuentas
 
-#### Funciones principales
+Efectivo, Tarjeta de Crédito/Débito, Transferencia, **BCP**, **BNB**, **Regions Bank**, **Truist Bank**, Billetera digital.
 
-**Barra lateral izquierda**
-- Navega entre **Gastos** (lista) y **Estadísticas** (gráficos).
-- Selecciona el mes que quieres ver (últimos 6 meses disponibles).
+### Monedas
 
-**Registrar un gasto manualmente**
-1. Haz clic en **+ Nuevo gasto** (arriba a la derecha).
-2. Completa: descripción, categoría, monto, moneda y método de pago.
-3. Haz clic en **Guardar**.
+- **BOB** por defecto si solo das montos «en bolivianos» o «Bs.»
+- **USD** si mencionas dólares, `USD` o `$`
 
-El gasto aparece en la lista de inmediato.
+## Manual de uso — Dashboard web
 
-**Vista Gastos**
-- Lista de gastos del mes ordenados del más reciente al más antiguo.
-- Cada ítem muestra: descripción, categoría, método de pago, fecha y monto.
-- Haz clic en **✕** al final de una fila para eliminar ese gasto.
+1. Abre la URL de Amplify.
+2. Usuario: **`carli`**. Contraseña: la de `COGNITO_PASSWORD` (o la que fijaste en Cognito).
 
-**Vista Estadísticas**
-- **Tarjetas de resumen**: total de gastos, total en CRC, total en USD, promedio por gasto.
-- **Gráfico de torta**: distribución de gastos por categoría.
-- **Gráfico de barras**: cantidad de gastos por método de pago.
+### Funciones
 
-**Tiempo real**
-- El punto verde junto a "Actualizado" indica que la suscripción en vivo está activa.
-- Cuando registras un gasto desde el bot de Telegram, aparece en el dashboard automáticamente sin recargar la página.
+- **Movimientos**: lista del mes; **✎** editar; **✕** eliminar.
+- **+ Nuevo movimiento**: gasto o ingreso, BOB/USD, categorías y métodos alineados con el bot.
+- **Resumen**: totales y gráficos (BOB/USD, gastos vs ingresos).
+- Los cambios desde la web o Telegram se reflejan con la suscripción en vivo cuando está activa.
 
----
+## Solución de problemas (bot)
 
-## Costo estimado
+| Síntoma | Causa habitual |
+|---------|----------------|
+| No responde o error genérico | Modelo Bedrock deshabilitado, cuenta sin acceso Marketplace (el rol CDK incluye permisos Bedrock + acciones Marketplace necesarias para el perfil de inferencia). Revisa consola Bedrock **Model access**. |
+| Error al segundo mensaje / `Decimal` | Corregido en código: saneo de tipos para `Converse` y detección de `toolUse`. Redeploy de la Lambda del bot. |
+| Lambda `ImportModuleError` pydantic | Vuelve a empaquetar con `./scripts/deploy.sh` (instalación `manylinux` para Linux, no macOS). |
+| Modelo «Legacy» | El proyecto usa **Claude Haiku 4.5** con ID de perfil `us.anthropic.claude-haiku-4-5-20251001-v1:0` (ver `backend/telegram_bot/agent.py`). |
 
-~$1–2/mes (uso personal). Con créditos AWS = $0.
+Si algo falla, revisa **CloudWatch** → log group `/aws/lambda/carli-finops-telegram-bot` (líneas `Agent error` o `Telegram sendMessage not ok`).
 
-| Servicio | Costo |
-|---|---|
-| Lambda, DynamoDB, API Gateway, Cognito, AppSync | Free Tier |
-| Amazon Bedrock (Claude Haiku) | ~$0.50/mes |
-| AWS Amplify | ~$0.50/mes |
+## Credenciales
+
+- **Usuario web**: `carli`
+- **Contraseña**: `COGNITO_PASSWORD` al desplegar, o la que configures en Cognito
+
+No commitees tokens ni contraseñas.
+
+## Costo estimado (uso personal)
+
+Del orden de **~$1–2/mes**; con créditos AWS puede ser **$0**. Bedrock (Haiku) y Amplify suelen ser las partes variables.
