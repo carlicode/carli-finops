@@ -22,36 +22,24 @@ SESSIONS_TABLE = os.environ["SESSIONS_TABLE"]
 OWNER_USER_ID = os.environ.get("OWNER_USER_ID", "carli")
 REGION = os.environ.get("REGION", "us-east-1")
 
-# Authorized Telegram user IDs (set after first use, or leave empty to allow all)
-ALLOWED_CHAT_IDS: set = set()
-
 dynamodb = boto3.resource("dynamodb", region_name=REGION)
 sessions = dynamodb.Table(SESSIONS_TABLE)
 
-CATEGORIES = [
-    "Comida & Restaurantes",
-    "Supermercado",
-    "Transporte",
-    "Entretenimiento",
-    "Salud",
-    "Servicios (luz, agua, etc.)",
-    "Ropa & Personal",
-    "Suscripciones",
-    "Viajes",
-    "Madre",
-    "Otros",
-]
-PAYMENT_METHODS = [
-    "Efectivo",
-    "Tarjeta de Crédito",
-    "Tarjeta de Débito",
-    "Transferencia",
-    "BCP",
-    "BNB",
-    "Regions Bank",
-    "Truist Bank",
-    "Billetera digital",
-]
+WELCOME_MESSAGE = (
+    "👋 ¡Hola Carli\\! Soy tu asistente financiero personal\\.\n\n"
+    "📝 *¿Qué puedo hacer?*\n"
+    "• Registrar *gastos* en Bs\\. o US$\n"
+    "• Registrar *ingresos* \\(sueldo, TikTok, freelance\\.\\.\\.\\)\n"
+    "• Mostrar tu *resumen mensual*\n\n"
+    "💬 *¿Cómo usarme?*\n"
+    "Solo cuéntame en lenguaje natural:\n\n"
+    "_Gasto:_ \"Almorcé en el mercado, 50 Bs, efectivo\"\n"
+    "_Ingreso:_ \"Me pagaron el sueldo 3500 bolivianos a BNB\"\n\n"
+    "🗂 *Comandos:*\n"
+    "/nuevo \\— Nuevo registro\n"
+    "/resumen \\— Resumen del mes\n"
+    "/cancelar \\— Cancelar el registro actual"
+)
 
 
 def lambda_handler(event: dict, context) -> dict:
@@ -82,22 +70,12 @@ def _handle_update(update: dict) -> None:
         return
 
     if text.startswith("/start"):
-        _send_message(
-            chat_id,
-            "Hola Carli! Registro *gastos* e *ingresos* en *Bs. (BOB)* o *US$*.\n\n"
-            "Ej. gasto: *Almuerzo 25 bs tarjeta de débito*\n"
-            "Ej. ingreso: *Me pagaron el sueldo 3500 bolivianos a la cuenta*\n\n"
-            "Comandos:\n"
-            "/nuevo — Nuevo registro (gasto o ingreso)\n"
-            "/resumen — Resumen del mes (BOB y USD)\n"
-            "/cancelar — Cancelar",
-            parse_mode="Markdown",
-        )
+        _send_message(chat_id, WELCOME_MESSAGE, parse_mode="MarkdownV2")
         return
 
     if text.startswith("/cancelar"):
         _clear_session(chat_id)
-        _send_message(chat_id, "Registro cancelado.")
+        _send_message(chat_id, "✅ Registro cancelado\\. Cuando quieras, cuéntame un nuevo movimiento\\.", parse_mode="MarkdownV2")
         return
 
     if text.startswith("/resumen"):
@@ -108,11 +86,12 @@ def _handle_update(update: dict) -> None:
         _clear_session(chat_id)
         _send_message(
             chat_id,
-            "Cuéntame un gasto o un ingreso (monto en Bs. o dólares):",
+            "📝 Listo\\! Cuéntame tu gasto o ingreso\\.\n\n"
+            "_Ej\\.: \"Almuerzo 25 Bs efectivo\" o \"Me pagaron 500 dólares\"_",
+            parse_mode="MarkdownV2",
         )
         return
 
-    # Main flow: pass to Strands agent
     _process_with_agent(chat_id, text)
 
 
@@ -120,11 +99,12 @@ def _process_with_agent(chat_id: str, user_text: str) -> None:
     session = _get_session(chat_id)
     conversation_history = session.get("history", [])
 
+    # Enviar mensaje de "procesando" inmediatamente para que el usuario sepa que recibimos su mensaje
+    thinking_msg_id = _send_message_get_id(chat_id, "⏳ Recibido\\! Procesando tu mensaje\\.\\.\\.", parse_mode="MarkdownV2")
+
     try:
-        _send_typing(chat_id)
         response_text, updated_history = process_message(user_text, conversation_history)
 
-        # Keep only last 20 messages to avoid DynamoDB item size limits
         if len(updated_history) > 20:
             updated_history = updated_history[-20:]
 
@@ -139,24 +119,31 @@ def _process_with_agent(chat_id: str, user_text: str) -> None:
 
         if tool_called:
             _clear_session(chat_id)
-            _send_inline_keyboard(
-                chat_id,
-                f"{confirm}\n\n¿Qué hacemos ahora?",
-                [[("Otro movimiento", "nuevo"), ("Resumen del mes", "resumen")]],
-            )
+            full_text = f"✅ {confirm}\n\n¿Qué hacemos ahora?"
+            keyboard = {"inline_keyboard": [[
+                {"text": "➕ Otro movimiento", "callback_data": "nuevo"},
+                {"text": "📊 Resumen del mes", "callback_data": "resumen"},
+            ]]}
+            if thinking_msg_id:
+                _edit_message(chat_id, thinking_msg_id, full_text, reply_markup=keyboard)
+            else:
+                _send_inline_keyboard(chat_id, full_text, [[("➕ Otro movimiento", "nuevo"), ("📊 Resumen del mes", "resumen")]])
         elif confirm:
-            _send_message(chat_id, confirm)
+            if thinking_msg_id:
+                _edit_message(chat_id, thinking_msg_id, confirm)
+            else:
+                _send_message(chat_id, confirm)
 
     except Exception as e:
         logger.exception("Agent error: %s", e)
-        _send_message(
-            chat_id,
-            "Ocurrió un error procesando tu mensaje. Por favor intenta de nuevo.",
-        )
+        error_text = "❌ Ocurrió un error procesando tu mensaje\\. Por favor intenta de nuevo\\."
+        if thinking_msg_id:
+            _edit_message(chat_id, thinking_msg_id, error_text, parse_mode="MarkdownV2")
+        else:
+            _send_message(chat_id, error_text, parse_mode="MarkdownV2")
 
 
 def _save_entry_confirmation_from_history(messages: list) -> str:
-    """save_entry return value is sent back as a user message with toolResult content blocks."""
     for msg in reversed(messages):
         if msg.get("role") != "user":
             continue
@@ -175,7 +162,6 @@ def _save_entry_confirmation_from_history(messages: list) -> str:
 
 
 def _check_tool_called(messages: list) -> bool:
-    """Detect tool use in Strands/Bedrock shapes (toolUse) and legacy Anthropic (type tool_use)."""
     for msg in reversed(messages):
         content = msg.get("content", [])
         if not isinstance(content, list):
@@ -183,17 +169,16 @@ def _check_tool_called(messages: list) -> bool:
         for block in content:
             if not isinstance(block, dict):
                 continue
-            if block.get("type") == "tool_use" and block.get("name") in ("save_entry", "save_expense"):
+            if block.get("type") == "tool_use" and block.get("name") in ("save_entry",):
                 return True
             tu = block.get("toolUse")
-            if isinstance(tu, dict) and tu.get("name") in ("save_entry", "save_expense"):
+            if isinstance(tu, dict) and tu.get("name") in ("save_entry",):
                 return True
     return False
 
 
 def _send_summary(chat_id: str) -> None:
     from datetime import datetime, timezone
-    import boto3
     from boto3.dynamodb.conditions import Key
 
     expenses_table_name = os.environ.get("EXPENSES_TABLE", "carli-finops-expenses")
@@ -201,7 +186,9 @@ def _send_summary(chat_id: str) -> None:
 
     now = datetime.now(timezone.utc)
     month = now.strftime("%Y-%m")
-    month_label = now.strftime("%B %Y")
+    month_label = now.strftime("%B %Y").capitalize()
+
+    status_msg_id = _send_message_get_id(chat_id, f"📊 Calculando tu resumen de {month_label}\\.\\.\\.", parse_mode="MarkdownV2")
 
     try:
         resp = expenses_table.query(
@@ -211,39 +198,49 @@ def _send_summary(chat_id: str) -> None:
         items = [i for i in resp.get("Items", []) if i.get("userId") == OWNER_USER_ID]
 
         if not items:
-            _send_message(chat_id, f"No hay movimientos en {month_label}.")
+            text = f"📭 No hay movimientos registrados en {month_label}\\."
+            if status_msg_id:
+                _edit_message(chat_id, status_msg_id, text, parse_mode="MarkdownV2")
+            else:
+                _send_message(chat_id, text, parse_mode="MarkdownV2")
             return
 
         def is_bob(c: str) -> bool:
-            return (c or "BOB").upper() in ("BOB", "CRC", "BS")
+            return (c or "BOB").upper() in ("BOB", "BS")
 
-        out_bob = sum(
-            float(i.get("amount", 0)) for i in items
-            if i.get("flow", "EXPENSE") == "EXPENSE" and is_bob(i.get("currency", "BOB"))
-        )
-        out_usd = sum(
-            float(i.get("amount", 0)) for i in items
-            if i.get("flow", "EXPENSE") == "EXPENSE" and (i.get("currency", "") or "").upper() == "USD"
-        )
-        in_bob = sum(
-            float(i.get("amount", 0)) for i in items
-            if i.get("flow") == "INCOME" and is_bob(i.get("currency", "BOB"))
-        )
-        in_usd = sum(
-            float(i.get("amount", 0)) for i in items
-            if i.get("flow") == "INCOME" and (i.get("currency", "") or "").upper() == "USD"
+        out_bob = sum(float(i.get("amount", 0)) for i in items if i.get("flow", "EXPENSE") == "EXPENSE" and is_bob(i.get("currency", "BOB")))
+        out_usd = sum(float(i.get("amount", 0)) for i in items if i.get("flow", "EXPENSE") == "EXPENSE" and (i.get("currency", "") or "").upper() == "USD")
+        in_bob  = sum(float(i.get("amount", 0)) for i in items if i.get("flow") == "INCOME" and is_bob(i.get("currency", "BOB")))
+        in_usd  = sum(float(i.get("amount", 0)) for i in items if i.get("flow") == "INCOME" and (i.get("currency", "") or "").upper() == "USD")
+
+        net_bob = in_bob - out_bob
+        net_usd = in_usd - out_usd
+        net_bob_sign = "\\+" if net_bob >= 0 else "\\-"
+        net_usd_sign = "\\+" if net_usd >= 0 else "\\-"
+
+        text = (
+            f"📊 *Resumen {month_label}*\n"
+            f"_{len(items)} movimientos registrados_\n\n"
+            f"💸 *Gastos*\n"
+            f"  Bs\\. {out_bob:,.2f}   \\|   US$ {out_usd:,.2f}\n\n"
+            f"💰 *Ingresos*\n"
+            f"  Bs\\. {in_bob:,.2f}   \\|   US$ {in_usd:,.2f}\n\n"
+            f"📈 *Balance*\n"
+            f"  {net_bob_sign} Bs\\. {abs(net_bob):,.2f}   \\|   {net_usd_sign} US$ {abs(net_usd):,.2f}"
         )
 
-        lines = [f"Resumen {month_label}", f"Registros: {len(items)}", ""]
-        lines.append(f"Gastos Bs.: {out_bob:,.2f}")
-        lines.append(f"Gastos US$: {out_usd:,.2f}")
-        lines.append(f"Ingresos Bs.: {in_bob:,.2f}")
-        lines.append(f"Ingresos US$: {in_usd:,.2f}")
+        if status_msg_id:
+            _edit_message(chat_id, status_msg_id, text, parse_mode="MarkdownV2")
+        else:
+            _send_message(chat_id, text, parse_mode="MarkdownV2")
 
-        _send_message(chat_id, "\n".join(lines))
     except Exception as e:
         logger.exception("Summary error: %s", e)
-        _send_message(chat_id, "Error al obtener el resumen.")
+        err = "❌ Error al obtener el resumen\\. Intenta de nuevo\\."
+        if status_msg_id:
+            _edit_message(chat_id, status_msg_id, err, parse_mode="MarkdownV2")
+        else:
+            _send_message(chat_id, err, parse_mode="MarkdownV2")
 
 
 def _handle_callback(callback_query: dict) -> None:
@@ -255,27 +252,28 @@ def _handle_callback(callback_query: dict) -> None:
 
     if data == "nuevo":
         _clear_session(chat_id)
-        _send_message(chat_id, "Cuéntame un gasto o un ingreso:")
+        _send_message(
+            chat_id,
+            "📝 Listo\\! Cuéntame tu gasto o ingreso\\.",
+            parse_mode="MarkdownV2",
+        )
     elif data == "resumen":
         _send_summary(chat_id)
 
 
+# ── DynamoDB session helpers ────────────────────────────────────────────────
+
 def _get_session(chat_id: str) -> dict:
     try:
         resp = sessions.get_item(Key={"chatId": chat_id})
-        item = resp.get("Item", {})
-        return item if item else {}
+        return resp.get("Item", {})
     except Exception:
         return {}
 
 
 def _save_session(chat_id: str, data: dict) -> None:
     try:
-        sessions.put_item(Item={
-            "chatId": chat_id,
-            "ttl": int(time.time()) + 86400,  # 24h TTL
-            **data,
-        })
+        sessions.put_item(Item={"chatId": chat_id, "ttl": int(time.time()) + 86400, **data})
     except Exception as e:
         logger.warning("Could not save session: %s", e)
 
@@ -286,6 +284,8 @@ def _clear_session(chat_id: str) -> None:
     except Exception:
         pass
 
+
+# ── Telegram API helpers ────────────────────────────────────────────────────
 
 def _send_message(chat_id: str, text: str, parse_mode: str = "") -> None:
     payload: dict = {"chat_id": chat_id, "text": text}
@@ -298,6 +298,38 @@ def _send_message(chat_id: str, text: str, parse_mode: str = "") -> None:
             logger.warning("Telegram sendMessage not ok: %s", data)
     except Exception as e:
         logger.warning("sendMessage failed: %s", e)
+
+
+def _send_message_get_id(chat_id: str, text: str, parse_mode: str = "") -> Optional[int]:
+    """Sends a message and returns its message_id for later editing."""
+    payload: dict = {"chat_id": chat_id, "text": text}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+    try:
+        r = requests.post(f"{TELEGRAM_API}/sendMessage", json=payload, timeout=10)
+        data = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+        if data.get("ok"):
+            return data["result"]["message_id"]
+        logger.warning("Telegram sendMessage not ok: %s", data)
+    except Exception as e:
+        logger.warning("sendMessage failed: %s", e)
+    return None
+
+
+def _edit_message(chat_id: str, message_id: int, text: str, parse_mode: str = "", reply_markup: dict = None) -> None:
+    """Edits a previously sent message in-place."""
+    payload: dict = {"chat_id": chat_id, "message_id": message_id, "text": text}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    try:
+        r = requests.post(f"{TELEGRAM_API}/editMessageText", json=payload, timeout=10)
+        data = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+        if not data.get("ok"):
+            logger.warning("Telegram editMessageText not ok: %s", data)
+    except Exception as e:
+        logger.warning("editMessageText failed: %s", e)
 
 
 def _send_inline_keyboard(chat_id: str, text: str, buttons: list) -> None:
@@ -315,23 +347,8 @@ def _send_inline_keyboard(chat_id: str, text: str, buttons: list) -> None:
         logger.warning("sendMessage (keyboard) failed: %s", e)
 
 
-def _send_typing(chat_id: str) -> None:
-    try:
-        requests.post(
-            f"{TELEGRAM_API}/sendChatAction",
-            json={"chat_id": chat_id, "action": "typing"},
-            timeout=5,
-        )
-    except Exception:
-        pass
-
-
 def _answer_callback(query_id: str) -> None:
     try:
-        requests.post(
-            f"{TELEGRAM_API}/answerCallbackQuery",
-            json={"callback_query_id": query_id},
-            timeout=5,
-        )
+        requests.post(f"{TELEGRAM_API}/answerCallbackQuery", json={"callback_query_id": query_id}, timeout=5)
     except Exception:
         pass

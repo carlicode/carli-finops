@@ -21,6 +21,13 @@ if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
   exit 1
 fi
 
+if [ -z "${GEMINI_API_KEY:-}" ]; then
+  echo "❌ GEMINI_API_KEY is required."
+  echo "   Obtén una gratis en: https://aistudio.google.com/apikey"
+  echo "   Export it: export GEMINI_API_KEY=your_key_here"
+  exit 1
+fi
+
 COGNITO_PASSWORD="${COGNITO_PASSWORD:-$(openssl rand -base64 12)!Aa1}"
 AWS_REGION="${CDK_DEPLOY_REGION:-us-east-1}"
 

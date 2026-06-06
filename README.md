@@ -6,7 +6,7 @@ Control de **gastos e ingresos** en **bolivianos (BOB / Bs.)** y **dólares (USD
 
 | Capa | Tecnología |
 |------|------------|
-| AI / Bot | AWS Strands Agents + Amazon Bedrock (**Claude Haiku 4.5**, perfil `us.anthropic...`) |
+| AI / Bot | AWS Strands Agents + **Google Gemini 2.0 Flash** (vía LiteLLM) |
 | Bot | Telegram Bot API (webhook → API Gateway → Lambda) |
 | Backend | AWS Lambda (Python 3.12): webhook + resolver GraphQL |
 | Base de datos | Amazon DynamoDB |
@@ -24,7 +24,7 @@ Tras cambiar `schema.graphql` o el stack CDK: vuelve a desplegar infraestructura
 Carli Finops/
 ├── infrastructure/       # CDK (DynamoDB, Cognito, AppSync, Lambda, API Gateway)
 ├── backend/
-│   ├── telegram_bot/     # Webhook + Strands + Bedrock
+│   ├── telegram_bot/     # Webhook + Strands + Gemini
 │   ├── telegram_bot_build/  # Generado al deploy (no commitear)
 │   └── expenses_api/     # Resolvers GraphQL
 ├── frontend/             # Dashboard React
@@ -37,8 +37,9 @@ Carli Finops/
 
 | Variable | Obligatoria | Uso |
 |----------|-------------|-----|
-| `TELEGRAM_BOT_TOKEN` | Sí (deploy completo) | Token de @BotFather; el CDK lo inyecta en la Lambda del bot |
-| `COGNITO_PASSWORD` | Recomendada | Contraseña del usuario `carli`. Si omites en `./scripts/deploy.sh`, se genera una aleatoria y se mostrará al final (anótala). |
+| `TELEGRAM_BOT_TOKEN` | Sí | Token de @BotFather; el CDK lo inyecta en la Lambda del bot |
+| `GEMINI_API_KEY` | Sí | API key de Google AI Studio ([obtener gratis](https://aistudio.google.com/apikey)) |
+| `COGNITO_PASSWORD` | Recomendada | Contraseña del usuario `carli`. Si omites, se genera una aleatoria (se mostrará al final). |
 | `CDK_DEPLOY_REGION` | No | Por defecto `us-east-1` |
 
 ### Prerrequisitos
@@ -46,7 +47,7 @@ Carli Finops/
 - AWS CLI configurado
 - Node.js 18+, Python 3.10+
 - `npm install -g aws-cdk`
-- En **Amazon Bedrock** (us-east-1): acceso al modelo **Claude Haiku 4.5** (o el acuerdo Anthropic activo en consola)
+- API key de Google Gemini (gratis en [aistudio.google.com/apikey](https://aistudio.google.com/apikey))
 
 ### Infraestructura + bot + webhook
 
@@ -143,10 +144,9 @@ Efectivo, Tarjeta de Crédito/Débito, Transferencia, **BCP**, **BNB**, **Region
 
 | Síntoma | Causa habitual |
 |---------|----------------|
-| No responde o error genérico | Modelo Bedrock deshabilitado, cuenta sin acceso Marketplace (el rol CDK incluye permisos Bedrock + acciones Marketplace necesarias para el perfil de inferencia). Revisa consola Bedrock **Model access**. |
-| Error al segundo mensaje / `Decimal` | Corregido en código: saneo de tipos para `Converse` y detección de `toolUse`. Redeploy de la Lambda del bot. |
-| Lambda `ImportModuleError` pydantic | Vuelve a empaquetar con `./scripts/deploy.sh` (instalación `manylinux` para Linux, no macOS). |
-| Modelo «Legacy» | El proyecto usa **Claude Haiku 4.5** con ID de perfil `us.anthropic.claude-haiku-4-5-20251001-v1:0` (ver `backend/telegram_bot/agent.py`). |
+| No responde o error genérico | `GEMINI_API_KEY` inválida o expirada. Verifica en CloudWatch y genera una nueva en [aistudio.google.com/apikey](https://aistudio.google.com/apikey). |
+| Lambda `ImportModuleError` | Vuelve a empaquetar con `./scripts/deploy.sh` (instalación `manylinux` para Linux, no macOS). |
+| Respuesta vacía del agente | Revisa CloudWatch — puede ser rate limit de Gemini (free tier: 1,500 req/día). |
 
 Si algo falla, revisa **CloudWatch** → log group `/aws/lambda/carli-finops-telegram-bot` (líneas `Agent error` o `Telegram sendMessage not ok`).
 
@@ -159,4 +159,4 @@ No commitees tokens ni contraseñas.
 
 ## Costo estimado (uso personal)
 
-Del orden de **~$1–2/mes**; con créditos AWS puede ser **$0**. Bedrock (Haiku) y Amplify suelen ser las partes variables.
+Del orden de **~$0–1/mes**. Gemini 2.0 Flash es gratuito (hasta 1,500 req/día). Solo paga AWS: Lambda, DynamoDB y Amplify, que en uso personal están dentro del free tier.

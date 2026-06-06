@@ -16,6 +16,7 @@ from constructs import Construct
 
 # Set via environment variable or AWS SSM — never hardcode here
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 OWNER_USER_ID = os.environ.get("OWNER_USER_ID", "carli")
 
 
@@ -92,28 +93,6 @@ class FinopsStack(cdk.Stack):
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole"),
             ],
-        )
-        # Bedrock Converse (Strands) + inference profiles; Anthropic via profile also needs Marketplace read/subscribe on the role
-        lambda_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=[
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream",
-                    "bedrock:Converse",
-                ],
-                resources=["*"],
-            )
-        )
-        lambda_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=[
-                    "aws-marketplace:ViewSubscriptions",
-                    "aws-marketplace:GetEntitlements",
-                    "aws-marketplace:DescribeAgreement",
-                    "aws-marketplace:Subscribe",
-                ],
-                resources=["*"],
-            )
         )
         expenses_table.grant_read_write_data(lambda_role)
         sessions_table.grant_read_write_data(lambda_role)
@@ -210,7 +189,7 @@ class FinopsStack(cdk.Stack):
                 "APPSYNC_API_KEY": graphql_api.api_key or "",
                 "OWNER_USER_ID": OWNER_USER_ID,
                 "REGION": self.region,
-                "BEDROCK_REGION": "us-east-1",
+                "GEMINI_API_KEY": GEMINI_API_KEY,
             },
             log_group=logs.LogGroup(
                 self, "BotLogGroup",
