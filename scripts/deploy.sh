@@ -21,10 +21,10 @@ if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
   exit 1
 fi
 
-if [ -z "${GEMINI_API_KEY:-}" ]; then
-  echo "❌ GEMINI_API_KEY is required."
-  echo "   Obtén una gratis en: https://aistudio.google.com/apikey"
-  echo "   Export it: export GEMINI_API_KEY=your_key_here"
+if [ -z "${GROQ_API_KEY:-}" ]; then
+  echo "❌ GROQ_API_KEY is required."
+  echo "   Obtén una gratis en: https://console.groq.com"
+  echo "   Export it: export GROQ_API_KEY=your_key_here"
   exit 1
 fi
 

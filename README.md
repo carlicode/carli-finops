@@ -6,7 +6,7 @@ Control de **gastos e ingresos** en **bolivianos (BOB / Bs.)** y **dólares (USD
 
 | Capa | Tecnología |
 |------|------------|
-| AI / Bot | AWS Strands Agents + **Google Gemini 2.0 Flash** (vía LiteLLM) |
+| AI / Bot | AWS Strands Agents + **Llama 3.3 70B** vía Groq (LiteLLM) |
 | Bot | Telegram Bot API (webhook → API Gateway → Lambda) |
 | Backend | AWS Lambda (Python 3.12): webhook + resolver GraphQL |
 | Base de datos | Amazon DynamoDB |
@@ -38,7 +38,7 @@ Carli Finops/
 | Variable | Obligatoria | Uso |
 |----------|-------------|-----|
 | `TELEGRAM_BOT_TOKEN` | Sí | Token de @BotFather; el CDK lo inyecta en la Lambda del bot |
-| `GEMINI_API_KEY` | Sí | API key de Google AI Studio ([obtener gratis](https://aistudio.google.com/apikey)) |
+| `GROQ_API_KEY` | Sí | API key de Groq ([obtener gratis](https://console.groq.com)) |
 | `COGNITO_PASSWORD` | Recomendada | Contraseña del usuario `carli`. Si omites, se genera una aleatoria (se mostrará al final). |
 | `CDK_DEPLOY_REGION` | No | Por defecto `us-east-1` |
 
@@ -47,7 +47,7 @@ Carli Finops/
 - AWS CLI configurado
 - Node.js 18+, Python 3.10+
 - `npm install -g aws-cdk`
-- API key de Google Gemini (gratis en [aistudio.google.com/apikey](https://aistudio.google.com/apikey))
+- API key de Groq (gratis en [console.groq.com](https://console.groq.com))
 
 ### Infraestructura + bot + webhook
 
@@ -144,9 +144,9 @@ Efectivo, Tarjeta de Crédito/Débito, Transferencia, **BCP**, **BNB**, **Region
 
 | Síntoma | Causa habitual |
 |---------|----------------|
-| No responde o error genérico | `GEMINI_API_KEY` inválida o expirada. Verifica en CloudWatch y genera una nueva en [aistudio.google.com/apikey](https://aistudio.google.com/apikey). |
+| No responde o error genérico | `GROQ_API_KEY` inválida o expirada. Verifica en CloudWatch y genera una nueva en [console.groq.com](https://console.groq.com). |
 | Lambda `ImportModuleError` | Vuelve a empaquetar con `./scripts/deploy.sh` (instalación `manylinux` para Linux, no macOS). |
-| Respuesta vacía del agente | Revisa CloudWatch — puede ser rate limit de Gemini (free tier: 1,500 req/día). |
+| Respuesta vacía del agente | Revisa CloudWatch — puede ser rate limit de Groq (free tier: 14,400 req/día). |
 
 Si algo falla, revisa **CloudWatch** → log group `/aws/lambda/carli-finops-telegram-bot` (líneas `Agent error` o `Telegram sendMessage not ok`).
 
@@ -159,4 +159,4 @@ No commitees tokens ni contraseñas.
 
 ## Costo estimado (uso personal)
 
-Del orden de **~$0–1/mes**. Gemini 2.0 Flash es gratuito (hasta 1,500 req/día). Solo paga AWS: Lambda, DynamoDB y Amplify, que en uso personal están dentro del free tier.
+Del orden de **~$0/mes**. Groq (Llama 3.3 70B) es gratuito (14,400 req/día). AWS Lambda, DynamoDB y Amplify en uso personal entran en el free tier.

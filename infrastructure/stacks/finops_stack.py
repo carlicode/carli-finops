@@ -16,7 +16,7 @@ from constructs import Construct
 
 # Set via environment variable or AWS SSM — never hardcode here
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 OWNER_USER_ID = os.environ.get("OWNER_USER_ID", "carli")
 
 
@@ -189,7 +189,7 @@ class FinopsStack(cdk.Stack):
                 "APPSYNC_API_KEY": graphql_api.api_key or "",
                 "OWNER_USER_ID": OWNER_USER_ID,
                 "REGION": self.region,
-                "GEMINI_API_KEY": GEMINI_API_KEY,
+                "GROQ_API_KEY": os.environ.get("GROQ_API_KEY", ""),
             },
             log_group=logs.LogGroup(
                 self, "BotLogGroup",

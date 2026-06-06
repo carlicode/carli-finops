@@ -140,7 +140,7 @@ def save_entry(
 
 def get_finops_agent() -> Agent:
     model = LiteLLMModel(
-        model_id="gemini/gemini-2.0-flash",
+        model_id="groq/llama-3.3-70b-versatile",
         temperature=0.3,
         streaming=False,
     )
