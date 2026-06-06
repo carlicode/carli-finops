@@ -25,6 +25,13 @@ REGION = os.environ.get("REGION", "us-east-1")
 dynamodb = boto3.resource("dynamodb", region_name=REGION)
 sessions = dynamodb.Table(SESSIONS_TABLE)
 
+MESES_ES = {
+    "January": "enero", "February": "febrero", "March": "marzo",
+    "April": "abril", "May": "mayo", "June": "junio",
+    "July": "julio", "August": "agosto", "September": "septiembre",
+    "October": "octubre", "November": "noviembre", "December": "diciembre",
+}
+
 WELCOME_MESSAGE = (
     "👋 ¡Hola Carli\\! Soy tu asistente financiero personal\\.\n\n"
     "📝 *¿Qué puedo hacer?*\n"
@@ -186,9 +193,10 @@ def _send_summary(chat_id: str) -> None:
 
     now = datetime.now(timezone.utc)
     month = now.strftime("%Y-%m")
-    month_label = now.strftime("%B %Y").capitalize()
+    month_en = now.strftime("%B")
+    month_label = f"{MESES_ES.get(month_en, month_en)} {now.year}"
 
-    status_msg_id = _send_message_get_id(chat_id, f"📊 Calculando tu resumen de {month_label}\\.\\.\\.", parse_mode="MarkdownV2")
+    status_msg_id = _send_message_get_id(chat_id, f"📊 Calculando tu resumen de {month_label}...")
 
     try:
         resp = expenses_table.query(
@@ -198,11 +206,11 @@ def _send_summary(chat_id: str) -> None:
         items = [i for i in resp.get("Items", []) if i.get("userId") == OWNER_USER_ID]
 
         if not items:
-            text = f"📭 No hay movimientos registrados en {month_label}\\."
+            text = f"📭 No hay movimientos registrados en {month_label}."
             if status_msg_id:
-                _edit_message(chat_id, status_msg_id, text, parse_mode="MarkdownV2")
+                _edit_message(chat_id, status_msg_id, text)
             else:
-                _send_message(chat_id, text, parse_mode="MarkdownV2")
+                _send_message(chat_id, text)
             return
 
         def is_bob(c: str) -> bool:
@@ -215,32 +223,32 @@ def _send_summary(chat_id: str) -> None:
 
         net_bob = in_bob - out_bob
         net_usd = in_usd - out_usd
-        net_bob_sign = "\\+" if net_bob >= 0 else "\\-"
-        net_usd_sign = "\\+" if net_usd >= 0 else "\\-"
+        net_bob_sign = "+" if net_bob >= 0 else "-"
+        net_usd_sign = "+" if net_usd >= 0 else "-"
 
         text = (
-            f"📊 *Resumen {month_label}*\n"
-            f"_{len(items)} movimientos registrados_\n\n"
-            f"💸 *Gastos*\n"
-            f"  Bs\\. {out_bob:,.2f}   \\|   US$ {out_usd:,.2f}\n\n"
-            f"💰 *Ingresos*\n"
-            f"  Bs\\. {in_bob:,.2f}   \\|   US$ {in_usd:,.2f}\n\n"
-            f"📈 *Balance*\n"
-            f"  {net_bob_sign} Bs\\. {abs(net_bob):,.2f}   \\|   {net_usd_sign} US$ {abs(net_usd):,.2f}"
+            f"<b>📊 Resumen {month_label}</b>\n"
+            f"<i>{len(items)} movimientos registrados</i>\n\n"
+            f"💸 <b>Gastos</b>\n"
+            f"  Bs. {out_bob:,.2f}   |   US$ {out_usd:,.2f}\n\n"
+            f"💰 <b>Ingresos</b>\n"
+            f"  Bs. {in_bob:,.2f}   |   US$ {in_usd:,.2f}\n\n"
+            f"📈 <b>Balance</b>\n"
+            f"  {net_bob_sign} Bs. {abs(net_bob):,.2f}   |   {net_usd_sign} US$ {abs(net_usd):,.2f}"
         )
 
         if status_msg_id:
-            _edit_message(chat_id, status_msg_id, text, parse_mode="MarkdownV2")
+            _edit_message(chat_id, status_msg_id, text, parse_mode="HTML")
         else:
-            _send_message(chat_id, text, parse_mode="MarkdownV2")
+            _send_message(chat_id, text, parse_mode="HTML")
 
     except Exception as e:
         logger.exception("Summary error: %s", e)
-        err = "❌ Error al obtener el resumen\\. Intenta de nuevo\\."
+        err = "❌ Error al obtener el resumen. Intenta de nuevo."
         if status_msg_id:
-            _edit_message(chat_id, status_msg_id, err, parse_mode="MarkdownV2")
+            _edit_message(chat_id, status_msg_id, err)
         else:
-            _send_message(chat_id, err, parse_mode="MarkdownV2")
+            _send_message(chat_id, err)
 
 
 def _handle_callback(callback_query: dict) -> None:
