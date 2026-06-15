@@ -1,10 +1,10 @@
 version: 1
 applications:
   - appRoot: frontend
-    framework: 'React'
+    framework: React
     build:
       commands:
-        - npm install
+        - npm ci
         - npm run build
     artifacts:
       baseDirectory: frontend/dist
