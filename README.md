@@ -161,3 +161,4 @@ No commitees tokens ni contraseñas.
 
 Del orden de **~$0/mes**. Groq (Llama 3.3 70B) es gratuito (14,400 req/día). AWS Lambda, DynamoDB y Amplify en uso personal entran en el free tier.
 # Updated Mon Jun 15 19:05:33 -04 2026
+# Build triggered
